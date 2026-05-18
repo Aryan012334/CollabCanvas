@@ -7,9 +7,9 @@
     "./client": "./src/index.ts"
   },
   "scripts": {
-    "generate": "prisma generate --schema=prisma/schema.prisma",
-    "migrate": "prisma migrate deploy --schema=prisma/schema.prisma",
-    "migrate:dev": "prisma migrate dev --schema=prisma/schema.prisma",
+    "generate": "node scripts/with-root-env.cjs generate --schema=prisma/schema.prisma",
+    "migrate": "node scripts/with-root-env.cjs migrate deploy --schema=prisma/schema.prisma",
+    "migrate:dev": "node scripts/with-root-env.cjs migrate dev --schema=prisma/schema.prisma",
     "build": "tsc -b",
     "postinstall": "pnpm prisma generate"
   },
@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.17.0",
-    "@repo/backend-common": "workspace:*"
+    "@repo/backend-common": "workspace:*",
+    "dotenv": "^17.2.3"
   }
 }

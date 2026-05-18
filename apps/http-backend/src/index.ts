@@ -22,7 +22,10 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(
   cors({
-    origin: "https://collabdraw.showcase.wiki",
+    origin:
+      process.env.NODE_ENV === "production"
+        ? "https://collabdraw.showcase.wiki"
+        : "http://localhost:3000",
     credentials: true,
   }),
 );
@@ -37,14 +40,13 @@ app.post("/signup", async (req, res) => {
     const parsedData = CreateUserSchema.safeParse(req.body);
 
     if (!parsedData.success) {
-      res.json({
+      return res.status(400).json({
         message: "Incorrect inputs",
+        errors: parsedData.error.flatten(),
       });
-      return;
     }
 
     const user = parsedData.data;
-
     const hashedPassword = await bcrypt.hash(user.password, 10);
     const returnedUser = await prisma.user.create({
       data: {
@@ -61,6 +63,7 @@ app.post("/signup", async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Signup error:", error);
     res.status(500).json({
       error: "error creating the user",
       debug: error instanceof Error ? error.message : error,
@@ -310,15 +313,15 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-app.listen(3000, () => {
-  console.log("Server started listening on port 3000");
+const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
+
+app.listen(PORT, () => {
+  console.log(`Server started listening on port ${PORT}`);
   cron.schedule("*/14 * * * *", async () => {
     try {
       console.log(" Running internal health cron...");
 
       await prisma.$queryRaw`SELECT 1`;
-      //   await axios.get("http://localhost:" + 3000 + "/health");
-
       console.log(" Health + DB ping success");
     } catch (err) {
       console.error(" Cron failed:", err);

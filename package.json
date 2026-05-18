@@ -14,6 +14,7 @@
     "build:ws": "pnpm --filter ws-server build",
     "db:generate": "pnpm --filter db run generate",
     "db:migrate": "pnpm --filter db run migrate",
+    "db:migrate:dev": "pnpm --filter db run migrate:dev",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
   "devDependencies": {
