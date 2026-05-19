@@ -29,23 +29,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Menu, Minus, Plus, Trash } from "lucide-react";
 import { CanvasDropdown } from "@/components/CanvasDropdown";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { Badge } from "@/components/ui/badge";
-import { useTheme } from "next-themes";
 import { Context } from "@/components/providers/ContextProvider";
 
 const Room = () => {
   const [selectedTool, setSelectedTool] = useState<ToolType>("select");
   const [zoom, setZoom] = useState(1);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
   const [canvasBg, setCanvasBg] = useState("#f5f5f5");
   const [isEditingText, setIsEditingText] = useState(false);
   const [currentText, setCurrentText] = useState("");
   const [selectedShapeId, setSelectedShapeId] = useState<number | null>(null);
+  const [connectTimeout, setConnectTimeout] = useState(false);
   const { roomId } = useParams();
-  // console.log(roomId);
+  const router = useRouter();
 
   const [showPropertyPanel, setShowPropertyPanel] = useState(false);
   const [currentProperties, setCurrentProperties] = useState<Partial<Shape>>({
@@ -60,7 +59,6 @@ const Room = () => {
     canvas: { x: number; y: number };
   }>({ screen: { x: 0, y: 0 }, canvas: { x: 0, y: 0 } });
   const [editingTextId, setEditingTextId] = useState<number | null>(null);
-  const { theme } = useTheme();
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const zoomRef = useRef(zoom);
@@ -130,8 +128,26 @@ const Room = () => {
         default:
           break;
       }
-    }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.id])
   );
+
+  // Redirect to login if no token (unauthenticated access)
+  useEffect(() => {
+    if (user !== undefined && !user?.token) {
+      router.replace("/login");
+    }
+  }, [user?.token, router]);
+
+  // Connection timeout — if still not connected after 15s, show error
+  useEffect(() => {
+    if (isConnected) {
+      setConnectTimeout(false);
+      return;
+    }
+    const t = setTimeout(() => setConnectTimeout(true), 15000);
+    return () => clearTimeout(t);
+  }, [isConnected]);
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -255,7 +271,6 @@ const Room = () => {
 
   const handlePropertyChange = (property: string, value: any) => {
     setCurrentProperties((prev) => ({ ...prev, [property]: value }));
-    console.log(selectedShapeId, "id");
     if (selectedShapeId !== null) {
       updateShapeProperty(
         selectedShapeId,
@@ -298,6 +313,7 @@ const Room = () => {
     }, 100);
 
     let cleanup: (() => void) | undefined;
+    let innerCleanup: (() => void) | undefined;
     let isSubscribed = true; // Prevent state updates after unmount
 
     const ctx = canvas.getContext("2d");
@@ -382,7 +398,6 @@ const Room = () => {
             if (!isSubscribed) return;
 
             setSelectedShapeId(shapeId);
-            console.log("shapeId", shapeId);
             if (shapeId !== null) {
               const shape = getShape(shapeId);
               if (shape) {
@@ -433,9 +448,8 @@ const Room = () => {
             setTimeout(() => textInputRef.current?.focus(), 0);
           },
           {
-            onPanStart: (isPanning: boolean) => {
+            onPanStart: (_isPanning: boolean) => {
               if (!isSubscribed) return;
-              setIsPanning(isPanning);
             },
             onPanMove: (offset: { x: number; y: number }) => {
               if (!isSubscribed) return;
@@ -466,7 +480,7 @@ const Room = () => {
 
     initializeCanvas().then((cleanupFn) => {
       if (cleanupFn) {
-        cleanup = cleanupFn;
+        innerCleanup = cleanupFn;
       }
     });
 
@@ -486,6 +500,7 @@ const Room = () => {
 
       isSubscribed = false;
       clearAllDrawings(); // prevent stale shapes on next room mount
+      if (innerCleanup) innerCleanup();
       if (cleanup) {
         cleanup();
       }
@@ -522,8 +537,20 @@ const Room = () => {
     return (
       <div className='flex items-center justify-center h-screen'>
         <div className='text-center'>
-          <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4'></div>
-          <p className='text-muted-foreground'>Connecting to room...</p>
+          {connectTimeout ? (
+            <>
+              <p className='text-destructive font-semibold mb-2'>Could not connect to room</p>
+              <p className='text-muted-foreground text-sm mb-4'>Check that the server is running and try again.</p>
+              <Button onClick={() => router.replace("/dashboard")} variant='outline'>
+                Back to Dashboard
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4'></div>
+              <p className='text-muted-foreground'>Connecting to room...</p>
+            </>
+          )}
         </div>
       </div>
     );
@@ -552,14 +579,7 @@ const Room = () => {
       {showPropertyPanel && (
         <PropertyPanel
           properties={currentProperties}
-          onPropertyChange={(property: string, value) => {
-            setCurrentProperties((prev) => ({ ...prev, [property]: value }));
-            // If a shape is selected, update it
-            console.log(selectedShapeId, "id");
-            if (selectedShapeId !== null) {
-              handlePropertyChange(property, value);
-            }
-          }}
+          onPropertyChange={handlePropertyChange}
           onClose={() => setShowPropertyPanel(false)}
         />
       )}

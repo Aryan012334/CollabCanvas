@@ -2,15 +2,24 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-COPY . .
+# Enable corepack for pnpm
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 
-RUN corepack enable
+# Copy workspace files
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc* ./
+COPY packages/ ./packages/
+COPY apps/http-backend/ ./apps/http-backend/
+
+# Install all dependencies
 RUN pnpm install --frozen-lockfile
 
-RUN pnpm build:api
+# Generate Prisma client
+RUN pnpm db:generate
 
-WORKDIR /app/apps/http-backend
+# Build the backend
+RUN pnpm build:api
 
 EXPOSE 3001
 
-CMD ["pnpm", "start"]
+# Run migrations then start
+CMD ["sh", "-c", "pnpm db:migrate && node apps/http-backend/dist/index.js"]

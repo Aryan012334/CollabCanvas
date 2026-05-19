@@ -2,15 +2,23 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-COPY . .
+# Enable corepack for pnpm
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 
-RUN corepack enable
+# Copy workspace files
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc* ./
+COPY packages/ ./packages/
+COPY apps/ws-server/ ./apps/ws-server/
+
+# Install all dependencies
 RUN pnpm install --frozen-lockfile
 
-RUN pnpm build:ws
+# Generate Prisma client
+RUN pnpm db:generate
 
-WORKDIR /app/apps/ws-server
+# Build the ws server
+RUN pnpm build:ws
 
 EXPOSE 4000
 
-CMD ["pnpm", "start"]
+CMD ["node", "apps/ws-server/dist/index.js"]

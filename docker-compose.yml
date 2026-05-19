@@ -2,17 +2,53 @@ version: '3.9'
 
 services:
   postgres:
-    image: postgres:latest
+    image: postgres:16-alpine
     container_name: collab-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: collabdraw
-      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  http-backend:
+    build:
+      context: .
+      dockerfile: apps/http-backend/Dockerfile
+    container_name: collab-http
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/collabdraw?schema=public
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
+      NODE_ENV: production
+      PORT: 3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ws-server:
+    build:
+      context: .
+      dockerfile: apps/ws-server/Dockerfile
+    container_name: collab-ws
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/collabdraw?schema=public
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
+      NODE_ENV: production
+      PORT: 4000
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres_data:

@@ -4,4 +4,7 @@ node_modules
 .turbo
 .next
 dist
+*.tsbuildinfo
 .env
+.env.local
+.env.*.local
