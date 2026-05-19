@@ -39,3 +39,10 @@ yarn-error.log*
 .DS_Store
 *.pem
 .vscode
+
+
+node_modules
+.next
+dist
+.git
+turbo

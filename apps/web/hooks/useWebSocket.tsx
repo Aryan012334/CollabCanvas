@@ -25,7 +25,7 @@ export function useWebSocket(onMessage: (data: any) => void) {
       return;
     }
 
-    const wsUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "ws://localhost:8080";
+    const wsUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "ws://localhost:4000";
     const fullUrl = `${wsUrl}?token=${user.token}`;
 
     console.log(" Creating new WebSocket connection", fullUrl);

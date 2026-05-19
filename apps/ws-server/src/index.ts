@@ -1,8 +1,8 @@
+import "./env"; // ← must be first: loads .env before JWT_SECRET is evaluated
 import http from "http";
 import express from "express";
 import { WebSocketServer } from "ws";
 import cron from "node-cron";
-import dotenv from "dotenv";
 
 import { verifyToken } from "./utils/auth";
 import { addUser, removeUser } from "./state";
@@ -10,8 +10,7 @@ import { handleEvent } from "./events/handlers";
 
 import { prismaClient as prisma } from "@repo/db/client";
 
-// Load env
-dotenv.config({ path: "../../.env" });
+
 
 const app = express();
 

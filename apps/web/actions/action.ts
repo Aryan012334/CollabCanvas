@@ -15,7 +15,6 @@ function generalizeRoomName(name: string) {
 }
 
 export function degeneralizeRoomName(name: string) {
-  //change - to space and each word firdt letter to uppercase
   return name
     .replaceAll("-", " ")
     .split(" ")
@@ -23,19 +22,21 @@ export function degeneralizeRoomName(name: string) {
     .join(" ");
 }
 
-const cookies = parseCookies();
-const options = {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    Authorization: cookies.token,
-  },
-  withCredentials: true,
-};
+/** Returns axios config with a fresh token read from the cookie on every call. */
+function authOptions() {
+  const { token } = parseCookies();
+  return {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: token,
+    },
+    withCredentials: true,
+  };
+}
 
 export const login = async (payload: LoginPayload) => {
   try {
-    const res = await api.post("/login", payload, options);
+    const res = await api.post("/login", payload, { withCredentials: true });
     return res?.data;
   } catch (err: any) {
     const message = err?.response?.data?.message || "Login failed";
@@ -57,7 +58,7 @@ export const createRoom = async (payload: RoomPayload) => {
   const slug = generalizeRoomName(payload.name);
   payload.name = slug;
   try {
-    const res = await api.post("/room", payload, options);
+    const res = await api.post("/room", payload, authOptions());
     return res?.data;
   } catch (err: any) {
     const message = err?.response?.data?.message || "Room creation failed";
@@ -67,7 +68,7 @@ export const createRoom = async (payload: RoomPayload) => {
 
 export const deleteRoom = async (roomId: string) => {
   try {
-    const res = await api.delete(`/room/${roomId}`, options);
+    const res = await api.delete(`/room/${roomId}`, authOptions());
     return res?.data;
   } catch (err: any) {
     const message = err?.response?.data?.message || "Something went wrong";
@@ -77,7 +78,7 @@ export const deleteRoom = async (roomId: string) => {
 
 export const getRooms = async () => {
   try {
-    const res = await api.get("/rooms", options);
+    const res = await api.get("/rooms", authOptions());
     return res?.data;
   } catch (err: any) {
     const message = err?.response?.data?.message || "Something went wrong";
@@ -87,7 +88,7 @@ export const getRooms = async () => {
 
 export const getAllShapesInRoom = async (roomId: number) => {
   try {
-    const res = await api.get(`/shapes/${roomId}`, options);
+    const res = await api.get(`/shapes/${roomId}`, authOptions());
     return res?.data;
   } catch (err: any) {
     const message = err?.response?.data?.message || "Something went wrong";
@@ -97,10 +98,9 @@ export const getAllShapesInRoom = async (roomId: number) => {
 
 export const getUser = async () => {
   try {
-    const res = await api.get("/me", options);
+    const res = await api.get("/me", authOptions());
     return res.data?.user;
   } catch (err: any) {
-    console.log(err?.response?.data?.message);
     const message = err?.response?.data?.message || "Something went wrong";
     throw new Error(message);
   }
