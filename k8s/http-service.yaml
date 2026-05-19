@@ -1,0 +1,25 @@
+# ============================================================
+# http-service.yaml
+#
+# WHY: Gives the http-backend pods a stable internal address.
+# The Ingress routes /api/* traffic to this Service,
+# which then load-balances across the 2 backend pods.
+#
+# ClusterIP = internal only. The Ingress is the only thing
+# that exposes it to the outside world.
+# ============================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: http-backend
+  namespace: collabdraw
+  labels:
+    app: http-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: http-backend      # Matches pods from http-deployment.yaml
+  ports:
+    - port: 3001
+      targetPort: 3001

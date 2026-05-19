@@ -1,0 +1,72 @@
+# ============================================================
+# http-deployment.yaml
+#
+# WHY: Runs the Express REST API inside Kubernetes.
+# A Deployment manages the pod lifecycle — if the container
+# crashes, Kubernetes automatically restarts it.
+#
+# TRAFFIC FLOW:
+#   Browser → Ingress (/api/*) → http-backend Service → this pod
+# ============================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: http-backend
+  namespace: collabdraw
+  labels:
+    app: http-backend
+spec:
+  replicas: 2              # 2 copies for basic availability
+  selector:
+    matchLabels:
+      app: http-backend
+  template:
+    metadata:
+      labels:
+        app: http-backend
+    spec:
+      containers:
+        - name: http-backend
+          # Replace with your actual image name after pushing to ECR or Docker Hub
+          # e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/collabdraw-http:latest
+          image: collabdraw-http:latest
+          imagePullPolicy: IfNotPresent   # Use local image if available (good for testing)
+          ports:
+            - containerPort: 3001
+          env:
+            # Pull DATABASE_URL from the ConfigMap
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: collabdraw-config
+                  key: DATABASE_URL
+            # Pull JWT_SECRET from the Secret
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: collabdraw-secret
+                  key: JWT_SECRET
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: collabdraw-config
+                  key: NODE_ENV
+            - name: PORT
+              value: "3001"
+          # Readiness probe: Kubernetes only sends traffic to this pod
+          # once this HTTP check returns 200. Prevents traffic going to
+          # a pod that hasn't finished starting up.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          # Liveness probe: if this fails, Kubernetes restarts the pod.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 20
+            periodSeconds: 15

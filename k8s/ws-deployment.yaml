@@ -1,0 +1,73 @@
+# ============================================================
+# ws-deployment.yaml
+#
+# WHY: Runs the WebSocket server inside Kubernetes.
+#
+# IMPORTANT NOTE ABOUT WEBSOCKETS + REPLICAS:
+# The ws-server keeps room state IN MEMORY (a Map of rooms).
+# If you run 2 replicas, User A might connect to pod-1 and
+# User B to pod-2 — they'd be in different memory spaces
+# and wouldn't see each other's drawings.
+#
+# For this reason we run replicas: 1 for now.
+# The future fix is Redis Pub/Sub so all pods share state.
+#
+# TRAFFIC FLOW:
+#   Browser → Ingress (/ws) → ws-server Service → this pod
+#   (WebSocket upgrade happens at the Ingress level)
+# ============================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ws-server
+  namespace: collabdraw
+  labels:
+    app: ws-server
+spec:
+  replicas: 1              # Keep at 1 until Redis is added (see note above)
+  selector:
+    matchLabels:
+      app: ws-server
+  template:
+    metadata:
+      labels:
+        app: ws-server
+    spec:
+      containers:
+        - name: ws-server
+          # Replace with your actual image after pushing to ECR/Docker Hub
+          image: collabdraw-ws:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: collabdraw-config
+                  key: DATABASE_URL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: collabdraw-secret
+                  key: JWT_SECRET
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: collabdraw-config
+                  key: NODE_ENV
+            - name: PORT
+              value: "4000"
+          readinessProbe:
+            httpGet:
+              path: /health    # ws-server has an Express /health endpoint
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 20
+            periodSeconds: 15

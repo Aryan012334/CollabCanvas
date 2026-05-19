@@ -1,0 +1,29 @@
+# ============================================================
+# postgres-service.yaml
+#
+# WHY: A Service gives the Postgres pod a stable DNS name
+# inside the cluster. Without this, other pods would need
+# to know the pod's IP address — which changes every restart.
+#
+# With this Service, any pod can reach Postgres at:
+#   host: postgres
+#   port: 5432
+#
+# ClusterIP means it is ONLY reachable inside the cluster.
+# The database is never exposed to the internet — good.
+# ========================== ==================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres           # This name becomes the DNS hostname
+  namespace: collabdraw
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP          # Internal only — not reachable from outside
+  selector:
+    app: postgres          # Routes traffic to pods with label app=postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

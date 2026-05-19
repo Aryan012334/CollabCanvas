@@ -1,0 +1,95 @@
+# ============================================================
+# ingress.yaml
+#
+# WHY: The Ingress is the single entry point into the cluster.
+# It's like a smart router that sits in front of everything
+# and decides where to send each request based on the URL path.
+#
+# HOW TRAFFIC FLOWS:
+#
+#   Internet
+#      │
+#      ▼
+#   AWS ALB (created automatically by the AWS Load Balancer Controller)
+#      │
+#      ├── /api/*  ──────────────► http-backend Service (port 3001)
+#      │                           (strips /api prefix before forwarding)
+#      │
+#      ├── /ws     ──────────────► ws-server Service (port 4000)
+#      │                           (WebSocket upgrade happens here)
+#      │
+#      └── /*      ──────────────► frontend Service (port 3000)
+#                                  (everything else goes to Next.js)
+#
+# WEBSOCKET NOTE:
+# The annotation "alb.ingress.kubernetes.io/target-type: ip" is
+# required for WebSocket connections to work with AWS ALB.
+# Without it, the ALB uses instance mode which breaks WS upgrades.
+#
+# PREREQUISITE:
+# The AWS Load Balancer Controller must be installed in your EKS cluster.
+# Install guide: https://docs.aws.amazon.com/eks/latest/userguide/aws-load-balancer-controller.html
+# ============================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: collabdraw-ingress
+  namespace: collabdraw
+  annotations:
+    # Tell Kubernetes to use the AWS ALB Ingress Controller
+    kubernetes.io/ingress.class: alb
+
+    # "internet-facing" = creates a public ALB reachable from the internet
+    # Use "internal" if you only want it accessible inside a VPC
+    alb.ingress.kubernetes.io/scheme: internet-facing
+
+    # "ip" mode is required for WebSocket support
+    # It routes directly to pod IPs instead of node IPs
+    alb.ingress.kubernetes.io/target-type: ip
+
+    # Enable HTTP → HTTPS redirect (comment out if you don't have a cert yet)
+    # alb.ingress.kubernetes.io/ssl-redirect: "443"
+
+    # Strip /api prefix before forwarding to the backend
+    # e.g. /api/rooms → /rooms (what Express actually expects)
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+
+spec:
+  rules:
+    - http:
+        paths:
+
+          # ── REST API ───────────────────────────────────────
+          # Requests to /api/anything go to the http-backend.
+          # The regex captures everything after /api so it can
+          # be rewritten (the rewrite-target annotation above).
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: http-backend
+                port:
+                  number: 3001
+
+          # ── WebSocket ──────────────────────────────────────
+          # Requests to /ws are upgraded to WebSocket connections
+          # and forwarded to the ws-server.
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: ws-server
+                port:
+                  number: 4000
+
+          # ── Frontend (catch-all) ───────────────────────────
+          # Everything else goes to the Next.js frontend.
+          # This must be LAST — most specific paths go first.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000

@@ -1,0 +1,22 @@
+# ============================================================
+# ws-service.yaml
+#
+# WHY: Gives the ws-server pod a stable internal address.
+# The Ingress routes /ws traffic here, which upgrades the
+# HTTP connection to a WebSocket connection.
+# ============================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: ws-server
+  namespace: collabdraw
+  labels:
+    app: ws-server
+spec:
+  type: ClusterIP
+  selector:
+    app: ws-server
+  ports:
+    - port: 4000
+      targetPort: 4000

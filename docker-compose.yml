@@ -1,54 +1,128 @@
-version: '3.9'
+version: "3.9"
+
+# ============================================================
+# CollabDraw — docker-compose.yml
+#
+# Runs the entire application with one command:
+#   docker compose up --build
+#
+# Services:
+#   postgres      → database (port 5433 on your machine)
+#   http-backend  → REST API (port 3001)
+#   ws-server     → WebSocket server (port 4000)
+#   web           → Next.js frontend (port 3000)
+#
+# All services talk to each other on the "collab-net" network.
+# From inside Docker, services reach each other by service name
+# e.g. http-backend connects to postgres at host "postgres:5432"
+# ============================================================
+
+networks:
+  # A private network just for our containers.
+  # Services on this network can reach each other by name.
+  collab-net:
+    driver: bridge
+
+volumes:
+  # Named volume so Postgres data survives container restarts.
+  postgres_data:
 
 services:
+
+  # ── 1. PostgreSQL ──────────────────────────────────────────
+  # Official Postgres image. Stores all users, rooms, shapes.
   postgres:
     image: postgres:16-alpine
     container_name: collab-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: collabdraw
     ports:
+      # 5433 on your machine → 5432 inside the container
+      # (5433 avoids conflict if you have local Postgres on 5432)
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - collab-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      # Docker waits for this to pass before starting dependent services
+      test: ["CMD-SHELL", "pg_isready -U postgres -d collabdraw"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
+  # ── 2. HTTP Backend ────────────────────────────────────────
+  # Express REST API. Handles auth, rooms, shapes.
+  # Runs DB migrations on startup before the server starts.
   http-backend:
     build:
-      context: .
+      context: .                              # build context = repo root
       dockerfile: apps/http-backend/Dockerfile
     container_name: collab-http
+    restart: unless-stopped
     ports:
       - "3001:3001"
     environment:
+      # "postgres" here is the service name above — Docker resolves it
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/collabdraw?schema=public
-      JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
+      JWT_SECRET: ${JWT_SECRET:-supersecretchangeme}
       NODE_ENV: production
       PORT: 3001
+    networks:
+      - collab-net
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_healthy   # wait for Postgres healthcheck to pass
 
+  # ── 3. WebSocket Server ────────────────────────────────────
+  # Handles real-time drawing sync between users.
+  # Clients connect via ws://localhost:4000?token=<jwt>
   ws-server:
     build:
       context: .
       dockerfile: apps/ws-server/Dockerfile
     container_name: collab-ws
+    restart: unless-stopped
     ports:
       - "4000:4000"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/collabdraw?schema=public
-      JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
+      JWT_SECRET: ${JWT_SECRET:-supersecretchangeme}
       NODE_ENV: production
       PORT: 4000
+    networks:
+      - collab-net
     depends_on:
       postgres:
         condition: service_healthy
 
-volumes:
-  postgres_data:
+  # ── 4. Next.js Frontend ────────────────────────────────────
+  # The browser app. Built with NEXT_PUBLIC_* URLs baked in.
+  # These tell the browser where to find the API and WebSocket.
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # These get baked into the JS bundle at build time.
+        # They point to localhost because the BROWSER (not Docker)
+        # makes these requests — so they must be reachable from
+        # the user's machine, not from inside Docker.
+        NEXT_PUBLIC_API_URL: http://localhost:3001
+        NEXT_PUBLIC_SOCKET_URL: ws://localhost:4000
+        NEXT_PUBLIC_SITE_URL: http://localhost:3000
+    container_name: collab-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    networks:
+      - collab-net
+    depends_on:
+      - http-backend
+      - ws-server

@@ -1,0 +1,17 @@
+# ============================================================
+# namespace.yaml
+#
+# WHY: A Namespace is like a folder inside Kubernetes.
+# It keeps all CollabDraw resources grouped together and
+# isolated from other apps running in the same cluster.
+#
+# Without this, everything goes into "default" which gets
+# messy when you have multiple projects.
+# ============================================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: collabdraw
+  labels:
+    app: collabdraw

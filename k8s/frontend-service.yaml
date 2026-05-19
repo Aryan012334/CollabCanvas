@@ -1,0 +1,21 @@
+# ============================================================
+# frontend-service.yaml
+#
+# WHY: Gives the frontend pods a stable internal address.
+# The Ingress routes all root traffic (/) here.
+# ============================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: collabdraw
+  labels:
+    app: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: frontend
+  ports:
+    - port: 3000
+      targetPort: 3000

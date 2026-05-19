@@ -1,10 +1,27 @@
+# Don't send these to Docker — keeps builds fast and images clean
+
+# Git history
+.git
+
+# Installed packages (Docker installs its own inside the image)
 node_modules
 .pnpm-store
-.git
-.turbo
-.next
+
+# Build output (Docker builds fresh)
 dist
+.next
 *.tsbuildinfo
+
+# Turbo cache
+.turbo
+
+# Local env files (secrets injected at runtime, not baked into image)
 .env
 .env.local
 .env.*.local
+
+# Editor config
+.vscode
+
+# Logs
+*.log

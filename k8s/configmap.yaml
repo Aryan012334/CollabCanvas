@@ -1,0 +1,30 @@
+# ============================================================
+# configmap.yaml
+#
+# WHY: A ConfigMap stores non-secret configuration values.
+# Instead of hardcoding URLs in every Deployment file,
+# we define them once here and reference them everywhere.
+#
+# Rule of thumb:
+#   ConfigMap  → non-sensitive config (URLs, ports, env names)
+#   Secret     → sensitive data (passwords, JWT keys)
+# ============================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: collabdraw-config
+  namespace: collabdraw
+data:
+  # The name "postgres" here matches the Postgres Service name below.
+  # Kubernetes DNS resolves service names automatically within a namespace.
+  DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/collabdraw?schema=public"
+
+  NODE_ENV: "production"
+
+  # These are the URLs the BROWSER uses to reach the API and WebSocket.
+  # In a real deployment, replace "your-domain.com" with your actual domain
+  # or the ALB DNS name that Kubernetes Ingress creates.
+  NEXT_PUBLIC_API_URL: "https://your-domain.com/api"
+  NEXT_PUBLIC_SOCKET_URL: "wss://your-domain.com/ws"
+  NEXT_PUBLIC_SITE_URL: "https://your-domain.com"
