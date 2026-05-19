@@ -12,13 +12,12 @@ import { useFetchUser } from "@/hooks/useUserFetcher";
 import DashboardSkeleton from "@/components/dashboard/DashboardSkeleton";
 
 export default function DashboardPage() {
-  //   const { data: fetchedUser, isLoading, invalidateUser } = useFetchUser();
-
+  const { isPending } = useFetchUser();
   const [searchQuery, setSearchQuery] = useState("");
 
-  //   if (isLoading) {
-  //     return <DashboardSkeleton />;
-  //   }
+  if (isPending) {
+    return <DashboardSkeleton />;
+  }
 
   return (
     <div className='min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950'>

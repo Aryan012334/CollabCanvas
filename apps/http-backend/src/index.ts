@@ -104,7 +104,7 @@ app.post("/login", async (req, res) => {
       return;
     }
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET);
+    const token = jwt.sign({ userId: user.id, name: user.name }, JWT_SECRET);
     res
       .cookie("token", token, {
         maxAge: 60 * 60 * 24 * 30, // 30 days
@@ -278,18 +278,7 @@ app.get("/rooms", authMiddleware, async (req, res) => {
     const rooms = await prisma.room.findMany({
       where: {
         deletedAt: null,
-        // OR: [
-        //     {
-        //         participants: {
-        //             some: {
-        //                 userId: userId,
-        //             },
-        //         },
-        //     },
-        //     {
-        //         adminId: userId,
-        //     },
-        // ],
+        adminId: userId,
       },
       include: {
         participants: true,

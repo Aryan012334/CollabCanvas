@@ -62,6 +62,7 @@ export function UserLoader({ children }: { children: React.ReactNode }) {
       });
       invalidateRooms();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   return <>{children}</>;

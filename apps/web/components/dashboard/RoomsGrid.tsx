@@ -59,7 +59,6 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteRoom, getRooms } from "@/actions/action";
 import { Context } from "../providers/ContextProvider";
-import { set } from "zod";
 
 type UserLike = { id: string };
 
@@ -161,7 +160,7 @@ function RoomCard({ room, user }: { room: Room; user: UserLike | null }) {
 
   const shareLink =
     (typeof window !== "undefined" ? window.location.origin : "") +
-    `/board/${room.slug}`;
+    `/board/${room.id}`;
 
   const copyLink = async () => {
     try {

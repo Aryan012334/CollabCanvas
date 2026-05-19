@@ -15,6 +15,7 @@ import {
   renderCanvas,
   updateShapeById,
   updateShapeProperty,
+  clearAllDrawings,
 } from "../game";
 import PropertyPanel from "@/components/Propertypanel";
 import TextOnCanvas from "@/components/TextOnCanvas";
@@ -74,6 +75,8 @@ const Room = () => {
     useCallback((eventData: any) => {
       switch (eventData.type) {
         case "shape:create":
+          // Skip echo for the shape creator — they already have it locally
+          if (eventData.userId === user?.id) break;
           allDrawings.push(eventData.shape);
           const canvas = canvasRef.current;
           const ctx = canvas?.getContext("2d");
@@ -480,6 +483,7 @@ const Room = () => {
       }
 
       isSubscribed = false;
+      clearAllDrawings(); // prevent stale shapes on next room mount
       if (cleanup) {
         cleanup();
       }
@@ -584,9 +588,20 @@ const Room = () => {
             <DropdownMenuContent
               align='start'
               className='w-56 rounded-2xl p-3 py-5 bg-background/95 backdrop-blur-sm'>
-              <DropdownMenuItem
+      <DropdownMenuItem
                 className='flex items-center gap-2 focus:bg-accent focus:text-accent-foreground cursor-pointer'
-                onSelect={(e) => e.preventDefault()}>
+                onSelect={(e) => {
+                  e.preventDefault();
+                  clearAllDrawings();
+                  const canvas = canvasRef.current;
+                  const ctx = canvas?.getContext("2d");
+                  if (canvas && ctx) {
+                    renderCanvas(canvas, ctx, {
+                      getZoom: () => zoomRef.current,
+                      getPanOffset: () => panOffsetRef.current,
+                    });
+                  }
+                }}>
                 <Trash className='w-4 h-4 text-destructive' />
                 <span>Reset Canvas</span>
               </DropdownMenuItem>

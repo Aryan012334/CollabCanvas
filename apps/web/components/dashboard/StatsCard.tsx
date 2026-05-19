@@ -38,7 +38,7 @@ export function StatsCards() {
           <div className='flex items-start justify-between'>
             <div>
               <p className='text-sm text-muted-foreground mb-1'>{stat.label}</p>
-              <p className='text-3xl font-bold bg-gradient-to-r ${stat.gradient} bg-clip-text text-transparent'>
+              <p className={`text-3xl font-bold bg-gradient-to-r ${stat.gradient} bg-clip-text text-transparent`}>
                 {stat.value}
               </p>
             </div>

@@ -8,13 +8,14 @@ const queue: {
   job: Job;
   resolve: (v: any) => void;
   reject: (e: any) => void;
+  retries: number;
 }[] = [];
 let processing = false;
 
 // --- Enqueue with Promise ---
 export function enqueue(job: Job): Promise<any> {
   return new Promise((resolve, reject) => {
-    queue.push({ job, resolve, reject });
+    queue.push({ job, resolve, reject, retries: 0 });
     processQueue();
   });
 }
@@ -25,7 +26,8 @@ async function processQueue() {
   processing = true;
 
   while (queue.length > 0) {
-    const { job, resolve, reject } = queue.shift()!;
+    const item = queue.shift()!;
+    const { job, resolve, reject } = item;
     try {
       let result;
 
@@ -82,9 +84,16 @@ async function processQueue() {
 
       resolve(result);
     } catch (err) {
-      console.error("DB write failed, retrying:", err);
-      queue.push({ job, resolve, reject }); // requeue
-      await new Promise((r) => setTimeout(r, 1000)); // backoff
+      console.error("DB write failed:", err);
+      const MAX_RETRIES = 3;
+      if (item.retries < MAX_RETRIES) {
+        item.retries += 1;
+        queue.unshift(item); // re-queue at front with incremented retry count
+        await new Promise((r) => setTimeout(r, 1000 * item.retries)); // backoff
+      } else {
+        console.error(`Job failed after ${MAX_RETRIES} retries, dropping:`, item.job);
+        item.reject(err);
+      }
     }
   }
 

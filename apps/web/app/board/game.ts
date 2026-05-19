@@ -6,6 +6,11 @@ import { v4 as uuidv4 } from "uuid";
 export let allDrawings: Shape[] = [];
 let currentPoints: { x: number; y: number }[] = [];
 
+/** Call this when leaving a room to prevent stale shapes on next mount. */
+export function clearAllDrawings() {
+    allDrawings = [];
+}
+
 
 export function drawSelectionBox(ctx: CanvasRenderingContext2D, shape: Shape) {
     ctx.save();
@@ -196,7 +201,9 @@ export async function initDrawing(
             const shape = allDrawings[i];
             if (!shape) return null;
 
-            if (shape.type === 'line' || shape.type === 'arrow') {
+            const shapeType = shape.type?.toUpperCase();
+
+            if (shapeType === 'LINE' || shapeType === 'ARROW') {
                 const tolerance = 10;
                 const x1 = shape.startX;
                 const y1 = shape.startY;
@@ -233,7 +240,7 @@ export async function initDrawing(
                     return shape;
                 }
             } // For text - check text bounds with actual stored dimensions
-            else if (shape.type === 'text' && shape.text) {
+            else if (shapeType === 'TEXT' && shape.text) {
                 // Use stored width and height (already calculated properly)
                 const textWidth = shape.width || 300;
                 const textHeight = shape.height || 30;
@@ -246,15 +253,8 @@ export async function initDrawing(
                 ) {
                     return shape;
                 }
-            } else if (shape.type === 'pencil') {
-                // if (
-                //     x >= shape.startX &&
-                //     x <= shape.startX + shape.width &&
-                //     y >= shape.startY &&
-                //     y <= shape.startY + shape.height
-                // ) {
-                //     return i;
-                // }
+            } else if (shapeType === 'PENCIL') {
+                // pencil hit-test not implemented
             } else {
                 const minX = Math.min(shape.startX, shape.startX + shape.width);
                 const maxX = Math.max(shape.startX, shape.startX + shape.width);
@@ -610,10 +610,6 @@ export function addTextShape(shape: Shape) {
 export function addShape(shape: Shape) {
     allDrawings.push(shape);
 
-}
-
-export function clearAllDrawings() {
-    allDrawings = [];
 }
 
 export function getAllDrawings() {

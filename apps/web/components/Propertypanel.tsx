@@ -74,10 +74,10 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({
               }`}
               style={{
                 backgroundColor:
-                  color.value === "transparent" ? "#AARRGGBB" : color.value,
+                  color.value === "transparent" ? "#ffffff" : color.value,
                 backgroundImage:
                   color.value === "transparent"
-                    ? "repeating-conic-gradient(#AARRGGBB 0% 25%, transparent 0% 50%) 50% / 8px 8px"
+                    ? "repeating-conic-gradient(#e5e7eb 0% 25%, #ffffff 0% 50%) 50% / 8px 8px"
                     : "none",
               }}
               title={color.name}
