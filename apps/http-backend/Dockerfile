@@ -3,42 +3,34 @@
 # Port: 3001
 # ============================================================
 
-# We use a two-stage build:
-#   Stage 1 (builder): install deps + compile TypeScript → JavaScript
-#   Stage 2 (runner):  copy only the compiled output, run it
-
-# ── Stage 1: Build ──────────────────────────────────────────
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Enable pnpm (comes bundled with Node via corepack)
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 
-# Copy workspace config files first.
-# Docker caches each layer — putting package files before source code
-# means "pnpm install" only re-runs when dependencies actually change.
+# Copy workspace config
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 
-# Copy every package.json in the monorepo so pnpm knows the workspace shape
-COPY packages/typescript-config/package.json ./packages/typescript-config/
-COPY packages/backend-common/package.json    ./packages/backend-common/
-COPY packages/common/package.json            ./packages/common/
-COPY packages/db/package.json                ./packages/db/
-COPY apps/http-backend/package.json          ./apps/http-backend/
+# Copy ALL packages with full source BEFORE pnpm install.
+# pnpm workspace symlinks point into these directories.
+# If the source files aren't here when pnpm install runs,
+# the symlinks resolve to empty directories and tsc fails.
+COPY packages/ ./packages/
+
+# Copy the app package.json (needed for workspace resolution)
+COPY apps/http-backend/package.json ./apps/http-backend/
 
 # Install all dependencies
+# postinstall in packages/db runs "prisma generate" — schema.prisma
+# is already present because we copied packages/ above.
 RUN pnpm install --frozen-lockfile
 
-# Now copy the actual source code
-COPY packages/ ./packages/
+# Copy app source code
 COPY apps/http-backend/ ./apps/http-backend/
 COPY turbo.json ./
 
-# Generate the Prisma client (creates the DB query helpers from schema.prisma)
-RUN pnpm db:generate
-
-# Compile TypeScript → JavaScript (output goes to apps/http-backend/dist/)
+# Compile TypeScript → JavaScript
 RUN pnpm build:api
 
 # ── Stage 2: Run ────────────────────────────────────────────
@@ -49,16 +41,17 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 
-# Copy compiled JS and all node_modules from the builder stage
-COPY --from=builder /app/apps/http-backend/dist  ./apps/http-backend/dist
-COPY --from=builder /app/node_modules            ./node_modules
-COPY --from=builder /app/apps/http-backend/node_modules ./apps/http-backend/node_modules
-COPY --from=builder /app/packages                ./packages
-COPY --from=builder /app/package.json            ./package.json
-COPY --from=builder /app/pnpm-workspace.yaml     ./pnpm-workspace.yaml
+COPY --from=builder /app/apps/http-backend/dist          ./apps/http-backend/dist
+COPY --from=builder /app/node_modules                    ./node_modules
+COPY --from=builder /app/apps/http-backend/node_modules  ./apps/http-backend/node_modules
+COPY --from=builder /app/packages                        ./packages
+COPY --from=builder /app/package.json                    ./package.json
+COPY --from=builder /app/pnpm-workspace.yaml             ./pnpm-workspace.yaml
 
-# Expose the port this service listens on
 EXPOSE 3001
 
-# Start the compiled server
-CMD ["node", "apps/http-backend/dist/index.js"]
+# Run Prisma migrations then start the server.
+# "migrate deploy" is safe to run on every startup — it only applies
+# migrations that haven't been applied yet. If the DB is already up
+# to date, it exits immediately with no changes.
+CMD ["sh", "-c", "packages/db/node_modules/.bin/prisma migrate deploy --schema=packages/db/prisma/schema.prisma && node apps/http-backend/dist/index.js"]

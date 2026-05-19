@@ -1,0 +1,225 @@
+# ============================================================
+# monitoring.yaml
+#
+# Simple Prometheus + Grafana monitoring setup.
+# Both run inside the cluster in a "monitoring" namespace.
+#
+# WHAT PROMETHEUS DOES:
+#   Scrapes metrics from Kubernetes pods every 15 seconds.
+#   Stores them as time-series data (numbers over time).
+#   Example metrics: CPU usage, memory usage, HTTP request count.
+#
+# WHAT GRAFANA DOES:
+#   Reads data from Prometheus and shows it as visual dashboards.
+#   You open it in your browser and see graphs of your app's health.
+#
+# HOW TO ACCESS AFTER DEPLOYING:
+#   kubectl port-forward svc/grafana 3001:3000 -n monitoring
+#   Then open: http://localhost:3001
+#   Default login: admin / admin
+# ============================================================
+
+# ── Namespace ──────────────────────────────────────────────
+# Monitoring tools get their own namespace, separate from the app.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+
+---
+
+# ============================================================
+# PROMETHEUS
+# ============================================================
+
+# ── ConfigMap: Prometheus scrape config ────────────────────
+# This tells Prometheus WHAT to monitor.
+# We use Kubernetes service discovery — Prometheus automatically
+# finds all pods in the cluster and scrapes their /metrics endpoint.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s      # Check every 15 seconds
+
+    scrape_configs:
+
+      # Monitor Prometheus itself
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      # Monitor all Kubernetes pods that have the annotation:
+      #   prometheus.io/scrape: "true"
+      # This is how Prometheus discovers your app's pods automatically.
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+---
+
+# ── Prometheus Deployment ───────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      # Prometheus needs permission to read pod info from Kubernetes API
+      serviceAccountName: prometheus-sa
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.47.0
+          ports:
+            - containerPort: 9090
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.retention.time=7d"   # Keep 7 days of data
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+
+---
+
+# ── Prometheus Service ──────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090
+
+---
+
+# ── ServiceAccount + ClusterRole ───────────────────────────
+# Prometheus needs permission to list pods and read their metadata.
+# This is the minimum permission required for pod discovery.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-sa
+  namespace: monitoring
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-role-binding
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-sa
+    namespace: monitoring
+roleRef:
+  kind: ClusterRole
+  name: prometheus-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+# ============================================================
+# GRAFANA
+# ============================================================
+
+# ── Grafana Deployment ──────────────────────────────────────
+# Grafana reads from Prometheus and shows visual dashboards.
+# Default credentials: admin / admin (change after first login)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.1.0
+          ports:
+            - containerPort: 3000
+          env:
+            # Default admin password — change this
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin"
+            # Pre-configure Prometheus as a data source so you don't
+            # have to set it up manually in the Grafana UI
+            - name: GF_DATASOURCES_DEFAULT_URL
+              value: "http://prometheus:9090"
+
+---
+
+# ── Grafana Service ─────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: 3000

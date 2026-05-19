@@ -1,26 +1,42 @@
-# Don't send these to Docker — keeps builds fast and images clean
+# ============================================================
+# .dockerignore
+#
+# Files excluded from the Docker build context.
+# Keeping this list tight makes builds faster and prevents
+# local node_modules from overwriting the ones pnpm installs
+# inside the container (which would break symlinks on Linux).
+# ============================================================
 
-# Git history
+# Git
 .git
 
-# Installed packages (Docker installs its own inside the image)
+# ALL node_modules — both root and nested in apps/packages.
+# This is the critical one: local Windows node_modules use
+# symlinks that don't work in Linux containers. pnpm installs
+# fresh Linux-compatible node_modules inside the container.
 node_modules
+**/node_modules
+
+# pnpm local store
 .pnpm-store
 
-# Build output (Docker builds fresh)
+# Build output (Docker builds fresh inside the container)
 dist
+**/dist
 .next
+**/.next
 *.tsbuildinfo
 
 # Turbo cache
 .turbo
+**/.turbo
 
-# Local env files (secrets injected at runtime, not baked into image)
+# Local env files (secrets injected at runtime)
 .env
 .env.local
 .env.*.local
 
-# Editor config
+# Editor
 .vscode
 
 # Logs
