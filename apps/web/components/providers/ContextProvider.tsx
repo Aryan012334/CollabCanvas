@@ -56,7 +56,7 @@ export function UserLoader({ children }: { children: React.ReactNode }) {
       setUser({
         name: data.name,
         email: data.email,
-        photo: data.photo,
+        photo: data.photo ?? "",
         token: cookies.token!,
         id: data.id,
       });

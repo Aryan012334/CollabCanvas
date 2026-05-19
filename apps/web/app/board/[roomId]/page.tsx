@@ -74,36 +74,37 @@ const Room = () => {
   const { send, isConnected } = useWebSocket(
     useCallback((eventData: any) => {
       switch (eventData.type) {
-        case "shape:create":
-          // Skip echo for the shape creator — they already have it locally
-          if (eventData.userId === user?.id) break;
+        case "shape:create": {
+          // Always push the echoed shape so allDrawings has the real DB id.
+          // For the creator, skip the re-render (shape is already visible).
+          const isOwnShape = eventData.userId === user?.id;
           allDrawings.push(eventData.shape);
-          const canvas = canvasRef.current;
-          const ctx = canvas?.getContext("2d");
-          if (canvas && ctx) {
-            renderCanvas(canvas, ctx, {
-              getZoom: () => zoomRef.current,
-              getPanOffset: () => panOffsetRef.current,
-            });
 
-            // setSelectedShapeId(eventData.shape.id);
-
-            setSelectedTool("select");
-
-            const shape = eventData.shape;
-            if (shape) {
-              setCurrentProperties({
-                strokeColor: shape.strokeColor || "#000000",
-                fillColor: shape.fillColor || "transparent",
-                strokeWidth: shape.strokeWidth || 2,
-                strokeStyle: shape.strokeStyle || "solid",
-                fillStyle: shape.fillStyle || "solid",
+          if (!isOwnShape) {
+            const canvas = canvasRef.current;
+            const ctx = canvas?.getContext("2d");
+            if (canvas && ctx) {
+              renderCanvas(canvas, ctx, {
+                getZoom: () => zoomRef.current,
+                getPanOffset: () => panOffsetRef.current,
               });
+              setSelectedTool("select");
+              const shape = eventData.shape;
+              if (shape) {
+                setCurrentProperties({
+                  strokeColor: shape.strokeColor || "#000000",
+                  fillColor: shape.fillColor || "transparent",
+                  strokeWidth: shape.strokeWidth || 2,
+                  strokeStyle: shape.strokeStyle || "solid",
+                  fillStyle: shape.fillStyle || "solid",
+                });
+              }
             }
           }
           break;
+        }
 
-        case "shape:update":
+        case "shape:update": {
           const { shape } = eventData;
 
           if (eventData.userId === user?.id) {
@@ -119,11 +120,12 @@ const Room = () => {
 
             setSelectedShapeId(eventData.shape.id);
             setSelectedTool("select");
-            if (eventData.shape.type === "text") {
+            if (eventData.shape.type === "TEXT") {
               setEditingTextId(null);
             }
           }
           break;
+        }
 
         default:
           break;

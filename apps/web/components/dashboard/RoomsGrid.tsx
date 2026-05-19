@@ -96,7 +96,7 @@ export function RoomsGrid({ searchQuery }: RoomsGridProps) {
       </div>
     );
   }
-  const filteredRooms = data?.rooms?.filter((it: any) =>
+  const filteredRooms = (data?.rooms ?? []).filter((it: any) =>
     it?.slug?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 

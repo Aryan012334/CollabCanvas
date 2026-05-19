@@ -12,10 +12,11 @@ import { useFetchUser } from "@/hooks/useUserFetcher";
 import DashboardSkeleton from "@/components/dashboard/DashboardSkeleton";
 
 export default function DashboardPage() {
-  const { isPending } = useFetchUser();
+  const { isPending, data } = useFetchUser();
   const [searchQuery, setSearchQuery] = useState("");
 
-  if (isPending) {
+  // Only show skeleton when actively loading (token exists but fetch in-flight)
+  if (isPending && data === undefined) {
     return <DashboardSkeleton />;
   }
 

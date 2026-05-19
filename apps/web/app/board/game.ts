@@ -1,7 +1,6 @@
 import { getToolTypeFromString, Shape, ToolType, ZoomContext } from "./types";
-import { repaintRect, repaintCircle, repaintLine, repaintDiamond, repaintArrow, repaintPencil, repaintText } from "./repaint";
+import { repaintRect, repaintCircle, repaintLine, repaintDiamond, repaintArrow, repaintText } from "./repaint";
 import { getAllShapesInRoom } from "@/actions/action";
-import { v4 as uuidv4 } from "uuid";
 
 export let allDrawings: Shape[] = [];
 let currentPoints: { x: number; y: number }[] = [];
@@ -162,8 +161,14 @@ export async function initDrawing(
 
     async function getAllShapes() {
         const res = await getAllShapesInRoom(roomId);
-
-        allDrawings = res
+        // Normalize nullable DB fields to safe defaults so rendering never crashes
+        allDrawings = (res ?? []).map((s: any) => ({
+            ...s,
+            startX: s.startX ?? 0,
+            startY: s.startY ?? 0,
+            width: s.width ?? 0,
+            height: s.height ?? 0,
+        }));
         if (!ctx || !canvas) return;
         renderPreviousShapes(canvas, ctx, allDrawings, zoomContext);
     }
@@ -577,11 +582,36 @@ export async function initDrawing(
     canvas.addEventListener("mousemove", handleMouseMove);
     canvas.addEventListener("dblclick", handleDoubleClick);
 
+    // Wheel zoom
+    const handleWheel = (e: WheelEvent) => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const currentZoom = zoomContext.getZoom();
+        const currentPan = zoomContext.getPanOffset();
+
+        const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+        const newZoom = Math.min(Math.max(currentZoom * zoomFactor, 0.1), 10);
+        const scale = newZoom / currentZoom;
+
+        const newPan = {
+            x: mouseX - (mouseX - currentPan.x) * scale,
+            y: mouseY - (mouseY - currentPan.y) * scale,
+        };
+
+        panZoomHandlers.onZoom(newZoom, newPan);
+    };
+
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+
     return () => {
         canvas.removeEventListener("mousedown", handleMouseDown);
         canvas.removeEventListener("mouseup", handleMouseUp);
         canvas.removeEventListener("mousemove", handleMouseMove);
         canvas.removeEventListener("dblclick", handleDoubleClick);
+        canvas.removeEventListener("wheel", handleWheel);
     };
 }
 

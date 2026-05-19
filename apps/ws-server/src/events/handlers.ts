@@ -101,14 +101,15 @@ async function processQueue() {
 }
 
 export async function handleEvent(user: User, data: any) {
+  // Normalize roomId to string for consistent Map key lookups
+  const roomId = String(data.roomId);
+
   switch (data.type) {
     case "join-room": {
-      //add a new room with this id
-      //check if the room is not in the rooms map
-      if (!rooms.has(data.roomId)) {
-        rooms.set(data.roomId, new Set());
+      if (!rooms.has(roomId)) {
+        rooms.set(roomId, new Set());
       }
-      const room = rooms.get(data.roomId);
+      const room = rooms.get(roomId);
 
       if (!room) {
         console.log("room not found");
@@ -127,7 +128,7 @@ export async function handleEvent(user: User, data: any) {
     }
 
     case "leave-room": {
-      const room = rooms.get(data.roomId);
+      const room = rooms.get(roomId);
       if (room && room.has(user)) {
         room.delete(user);
 
@@ -139,31 +140,31 @@ export async function handleEvent(user: User, data: any) {
                 type: "user_left",
                 userId: user.userId,
                 username: user.name,
-                roomId: data.roomId,
+                roomId: roomId,
               }),
             );
           }
         });
 
         if (room.size === 0) {
-          rooms.delete(data.roomId);
+          rooms.delete(roomId);
         }
 
-        console.log(`User ${user.name} left room ${data.roomId} gracefully`);
+        console.log(`User ${user.name} left room ${roomId} gracefully`);
       }
       break;
     }
 
     case "chat": {
       // broadcast immediately
-      const room = rooms.get(data.roomId);
+      const room = rooms.get(roomId);
       if (room) {
         room.forEach((u) =>
           u.ws.send(
             JSON.stringify({
               type: "chat",
               message: data.message,
-              roomId: data.roomId,
+              roomId: roomId,
               userId: user.userId,
               username: user.name,
             }),
@@ -174,7 +175,7 @@ export async function handleEvent(user: User, data: any) {
       // enqueue DB write
       enqueue({
         type: "chat",
-        roomId: data.roomId,
+        roomId: roomId,
         userId: user.userId,
         payload: { message: data.message },
       });
@@ -182,10 +183,10 @@ export async function handleEvent(user: User, data: any) {
     }
 
     case "shape:create": {
-      const room = rooms.get(data.roomId);
+      const room = rooms.get(roomId);
       const createdShape = await enqueue({
         type: "shape:create",
-        roomId: data.roomId,
+        roomId: roomId,
         userId: user.userId,
         payload: data.shape,
       });
@@ -199,7 +200,7 @@ export async function handleEvent(user: User, data: any) {
                   ...data.shape,
                   id: createdShape.id,
                 },
-                roomId: data.roomId,
+                roomId: roomId,
                 userId: user.userId,
                 username: user.name,
               }),
@@ -211,11 +212,11 @@ export async function handleEvent(user: User, data: any) {
     }
 
     case "shape:update": {
-      const room = rooms.get(data.roomId);
+      const room = rooms.get(roomId);
 
       const updatedShape = await enqueue({
         type: "shape:update",
-        roomId: data.roomId,
+        roomId: roomId,
         userId: user.userId,
         payload: data.shape,
       });
@@ -228,7 +229,7 @@ export async function handleEvent(user: User, data: any) {
                 ...data.shape,
                 id: updatedShape.id,
               },
-              roomId: data.roomId,
+              roomId: roomId,
               userId: user.userId,
               username: user.name,
             }),

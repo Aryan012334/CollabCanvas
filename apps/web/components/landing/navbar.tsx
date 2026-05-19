@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Github } from "lucide-react";
+import { Github, PaintBucket } from "lucide-react";
 import DarkMode from "../DarkMode";
 
 export function Navbar() {
@@ -14,15 +13,9 @@ export function Navbar() {
           <Link
             href='/'
             className='group inline-flex items-center gap-2'
-            aria-label='Excalidraw Clone Home'>
-            <Image
-              src='/placeholder-logo.svg'
-              width={24}
-              height={24}
-              alt='Logo'
-              className='opacity-90 transition-opacity group-hover:opacity-100'
-            />
-            <span className='font-medium tracking-tight'>Excalidraw Clone</span>
+            aria-label='CollabDraw Home'>
+            <PaintBucket className='size-5 text-primary' />
+            <span className='font-medium tracking-tight'>CollabDraw</span>
           </Link>
 
           <nav className='hidden items-center gap-6 md:flex'>

@@ -11,6 +11,6 @@ RUN pnpm build:api
 
 WORKDIR /app/apps/http-backend
 
-EXPOSE 3000
+EXPOSE 3001
 
 CMD ["pnpm", "start"]

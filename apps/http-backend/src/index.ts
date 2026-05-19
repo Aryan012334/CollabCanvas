@@ -242,7 +242,7 @@ app.get("/shapes/:roomId", authMiddleware, async (req, res) => {
         roomId: roomId,
       },
       orderBy: {
-        id: "desc",
+        id: "asc",
       },
       take: 1000,
     });
@@ -268,7 +268,9 @@ app.get("/room/:slug", async (req, res) => {
     res.json({
       room,
     });
-  } catch (error) {}
+  } catch (error) {
+    res.status(500).json({ room: null, message: "Something went wrong" });
+  }
 });
 
 app.get("/rooms", authMiddleware, async (req, res) => {
@@ -290,7 +292,10 @@ app.get("/rooms", authMiddleware, async (req, res) => {
     res.json({
       rooms,
     });
-  } catch (error) {}
+  } catch (error) {
+    console.error("Get rooms error:", error);
+    res.status(500).json({ rooms: [], message: "Something went wrong" });
+  }
 });
 
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {

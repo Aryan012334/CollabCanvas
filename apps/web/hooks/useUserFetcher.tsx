@@ -5,16 +5,17 @@ import { parseCookies } from "nookies";
 export function useFetchUser() {
   const queryClient = useQueryClient();
   const cookies = parseCookies();
-  console.log(cookies);
 
   const query = useQuery({
     queryKey: ["user"],
-    queryFn: async () => getUser(),
+    queryFn: async () => {
+      // Only fetch if a token cookie exists — avoids a guaranteed 401 on public pages
+      if (!cookies.token) return null;
+      return getUser();
+    },
     retry: false,
     staleTime: Infinity,
   });
-
-  // Sync React Query → Context
 
   const invalidateRooms = async () => {
     await queryClient.invalidateQueries({ queryKey: ["rooms"] });
