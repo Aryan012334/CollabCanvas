@@ -8,7 +8,7 @@ export function StrokeControls({
   onPropertyChange,
 }: {
   properties: Partial<Shape>;
-  onPropertyChange: (property: string, value: any) => void;
+  onPropertyChange: (property: string, value: unknown) => void;
 }) {
   const strokeWidths = [1, 2, 4];
   const strokeStyles = ["solid", "dashed", "dotted"];

@@ -372,21 +372,21 @@ export function repaintPencil(ctx: CanvasRenderingContext2D, shape: Shape) {
         ctx.setLineDash([]);
     }
 
-    //@ts-ignore
+    //@ts-expect-error -- points array items are typed as unknown in Shape
     ctx.moveTo(shape.points[0].x, shape.points[0].y);
 
     for (let i = 1; i < shape.points.length - 1; i++) {
-        //@ts-ignore
+        //@ts-expect-error -- points array items are typed as unknown in Shape
         const xc = (shape.points[i].x + shape.points[i + 1].x) / 2;
-        //@ts-ignore
+        //@ts-expect-error -- points array items are typed as unknown in Shape
         const yc = (shape.points[i].y + shape.points[i + 1].y) / 2;
-        //@ts-ignore
+        //@ts-expect-error -- points array items are typed as unknown in Shape
         ctx.quadraticCurveTo(shape.points[i].x, shape.points[i].y, xc, yc);
     }
 
     if (shape.points.length > 1) {
         const lastIdx = shape.points.length - 1;
-        //@ts-ignore
+        //@ts-expect-error -- points array items are typed as unknown in Shape
         ctx.lineTo(shape.points[lastIdx].x, shape.points[lastIdx].y);
     }
 

@@ -33,6 +33,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { Badge } from "@/components/ui/badge";
 import { Context } from "@/components/providers/ContextProvider";
+import { getRoomBySlug } from "@/actions/action";
 
 const Room = () => {
   const [selectedTool, setSelectedTool] = useState<ToolType>("select");
@@ -45,6 +46,13 @@ const Room = () => {
   const [connectTimeout, setConnectTimeout] = useState(false);
   const { roomId } = useParams();
   const router = useRouter();
+
+  // resolvedRoomId is always a numeric ID string (e.g. "42").
+  // The URL param may be a slug ("my-room") or a numeric ID ("42").
+  // We resolve slugs to numeric IDs via GET /room/:slug before
+  // doing anything — otherwise Number("my-room") = NaN and
+  // both shape fetching and WS room joining silently break.
+  const [resolvedRoomId, setResolvedRoomId] = useState<number | null>(null);
 
   const [showPropertyPanel, setShowPropertyPanel] = useState(false);
   const [currentProperties, setCurrentProperties] = useState<Partial<Shape>>({
@@ -70,13 +78,11 @@ const Room = () => {
   const { user } = useContext(Context);
 
   const { send, isConnected } = useWebSocket(
-    useCallback((eventData: any) => {
+    useCallback((eventData: Record<string, unknown>) => {
       switch (eventData.type) {
         case "shape:create": {
-          // Always push the echoed shape so allDrawings has the real DB id.
-          // For the creator, skip the re-render (shape is already visible).
           const isOwnShape = eventData.userId === user?.id;
-          allDrawings.push(eventData.shape);
+          allDrawings.push(eventData.shape as Shape);
 
           if (!isOwnShape) {
             const canvas = canvasRef.current;
@@ -87,7 +93,7 @@ const Room = () => {
                 getPanOffset: () => panOffsetRef.current,
               });
               setSelectedTool("select");
-              const shape = eventData.shape;
+              const shape = eventData.shape as Partial<Shape>;
               if (shape) {
                 setCurrentProperties({
                   strokeColor: shape.strokeColor || "#000000",
@@ -103,7 +109,7 @@ const Room = () => {
         }
 
         case "shape:update": {
-          const { shape } = eventData;
+          const shape = eventData.shape as Shape;
 
           if (eventData.userId === user?.id) {
             return;
@@ -116,9 +122,9 @@ const Room = () => {
               getPanOffset: () => panOffsetRef.current,
             });
 
-            setSelectedShapeId(eventData.shape.id);
+            setSelectedShapeId((eventData.shape as Shape).id);
             setSelectedTool("select");
-            if (eventData.shape.type === "TEXT") {
+            if ((eventData.shape as Shape).type === "TEXT") {
               setEditingTextId(null);
             }
           }
@@ -134,10 +140,34 @@ const Room = () => {
 
   // Redirect to login if no token (unauthenticated access)
   useEffect(() => {
-    if (user !== undefined && !user?.token) {
+    if (!user?.token) {
       router.replace("/login");
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.token, router]);
+
+  // Resolve roomId param → numeric ID.
+  // If the URL param is already a number ("42"), use it directly.
+  // If it's a slug ("my-room"), call GET /room/:slug to get the numeric ID.
+  useEffect(() => {
+    if (!roomId) return;
+    const param = (Array.isArray(roomId) ? roomId[0] : roomId) ?? "";
+    if (!param) return;
+    const asNumber = Number(param);
+    if (!isNaN(asNumber) && asNumber > 0) {
+      setResolvedRoomId(asNumber);
+    } else {
+      getRoomBySlug(param)
+        .then((room) => {
+          if (room?.id) {
+            setResolvedRoomId(room.id);
+          } else {
+            router.replace("/dashboard");
+          }
+        })
+        .catch(() => router.replace("/dashboard"));
+    }
+  }, [roomId, router]);
 
   // Connection timeout — if still not connected after 15s, show error
   useEffect(() => {
@@ -237,10 +267,9 @@ const Room = () => {
 
     if (editingTextId !== null) {
       const shape = getShape(editingTextId);
-      //add new data for the shape add a property with three values
       send({
         type: "shape:update",
-        roomId: Number(roomId),
+        roomId: resolvedRoomId,
         shape: {
           ...shape,
           text: text,
@@ -252,7 +281,7 @@ const Room = () => {
     } else {
       send({
         type: "shape:create",
-        roomId: Number(roomId),
+        roomId: resolvedRoomId,
         shape: {
           startX: x,
           startY: y,
@@ -269,15 +298,15 @@ const Room = () => {
     setCurrentText("");
   };
 
-  const handlePropertyChange = (property: string, value: any) => {
+  const handlePropertyChange = (property: string, value: unknown) => {
     setCurrentProperties((prev) => ({ ...prev, [property]: value }));
-    if (selectedShapeId !== null) {
+    if (selectedShapeId !== null && resolvedRoomId !== null) {
       updateShapeProperty(
         selectedShapeId,
         property as keyof Shape,
         value,
         send,
-        Number(roomId)
+        resolvedRoomId
       );
     }
   };
@@ -302,13 +331,13 @@ const Room = () => {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !roomId || !isConnected) return;
+    if (!canvas || !resolvedRoomId || !isConnected) return;
 
     const timer = setTimeout(() => {
-      console.log(" Joining room:", roomId);
+      console.log(" Joining room:", resolvedRoomId);
       send({
         type: "join-room",
-        roomId: Number(roomId),
+        roomId: resolvedRoomId,
       });
     }, 100);
 
@@ -319,7 +348,7 @@ const Room = () => {
     const ctx = canvas.getContext("2d");
 
     async function initializeCanvas() {
-      if (!roomId) return;
+      if (!resolvedRoomId) return;
       if (!canvas) return;
 
       const resizeCanvas = () => {
@@ -369,7 +398,7 @@ const Room = () => {
         cleanup = await initDrawing(
           canvas,
           send,
-          Number(roomId),
+          resolvedRoomId,
           () => selectedToolRef.current,
           () => currentPropertiesRef.current,
           {
@@ -448,7 +477,7 @@ const Room = () => {
             setTimeout(() => textInputRef.current?.focus(), 0);
           },
           {
-            onPanStart: (_isPanning: boolean) => {
+            onPanStart: (_: boolean) => {
               if (!isSubscribed) return;
             },
             onPanMove: (offset: { x: number; y: number }) => {
@@ -488,10 +517,10 @@ const Room = () => {
       clearTimeout(timer);
       try {
         if (isConnected) {
-          console.log(" Leaving room:", roomId);
+          console.log(" Leaving room:", resolvedRoomId);
           send({
             type: "leave-room",
-            roomId: Number(roomId),
+            roomId: resolvedRoomId,
           });
         }
       } catch (error) {
@@ -505,7 +534,7 @@ const Room = () => {
         cleanup();
       }
     };
-  }, [isConnected, send]);
+  }, [isConnected, send, resolvedRoomId]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -532,6 +561,17 @@ const Room = () => {
       }, 10);
     }
   }, [isEditingText]);
+
+  if (!resolvedRoomId) {
+    return (
+      <div className='flex items-center justify-center h-screen'>
+        <div className='text-center'>
+          <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4'></div>
+          <p className='text-muted-foreground'>Loading room...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isConnected) {
     return (

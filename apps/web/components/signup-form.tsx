@@ -116,7 +116,7 @@ export function SignupForm({
               />
               {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
               <FieldDescription>
-                We'll use this to contact you. We will not share your email with
+                We&apos;ll use this to contact you. We will not share your email with
                 anyone else.
               </FieldDescription>
             </Field>
@@ -175,8 +175,7 @@ export function SignupForm({
           </Button>
           <FieldDescription className='px-6 text-center'>
             Already have an account? <Link href='/login'>Sign in</Link>
-          </FieldDescription>
-        </Field>
+          </FieldDescription>        </Field>
       </FieldGroup>
     </form>
   );

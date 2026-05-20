@@ -5,7 +5,7 @@ import { useCallback, useContext, useEffect, useRef, useState } from "react";
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
-export function useWebSocket(onMessage: (data: any) => void) {
+export function useWebSocket(onMessage: (data: Record<string, unknown>) => void) {
   const [isConnected, setIsConnected] = useState(false);
   const ws = useRef<WebSocket | null>(null);
   const { user } = useContext(Context);
@@ -13,7 +13,6 @@ export function useWebSocket(onMessage: (data: any) => void) {
   const reconnectAttempts = useRef(0);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMounted = useRef(true);
-
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);

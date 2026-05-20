@@ -46,7 +46,7 @@ export function ContextProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function UserLoader({ children }: { children: React.ReactNode }) {
-  const { user, setUser } = useContext(Context);
+  const { setUser } = useContext(Context);
   const cookies = parseCookies();
 
   const { data, invalidateRooms } = useFetchUser();

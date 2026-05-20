@@ -105,3 +105,13 @@ export const getUser = async () => {
     throw new Error(message);
   }
 };
+
+export const getRoomBySlug = async (slug: string) => {
+  try {
+    const res = await api.get(`/room/${slug}`);
+    return res.data?.room;
+  } catch (err: any) {
+    const message = err?.response?.data?.message || "Something went wrong";
+    throw new Error(message);
+  }
+};

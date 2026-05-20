@@ -4,7 +4,6 @@ import "./globals.css";
 import { AppProviders } from "@/components/providers/AppProvider";
 import { Toaster } from "@/components/ui/sonner";
 import {
-  Context,
   ContextProvider,
   UserLoader,
 } from "@/components/providers/ContextProvider";

@@ -18,10 +18,10 @@ import * as z from "zod";
 import { toast } from "sonner";
 import { Spinner } from "./ui/spinner";
 import Link from "next/link";
-import { redirect, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useContext } from "react";
 import { Context } from "@/components/providers/ContextProvider";
-import { parseCookies, setCookie, destroyCookie } from "nookies";
+import { setCookie } from "nookies";
 
 const formSchema = z.object({
   email: z.string().email({ message: "Invalid email" }),

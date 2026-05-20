@@ -1,11 +1,7 @@
 "use client";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 import { Sun, Moon, Computer, Github, Twitter, Instagram } from "lucide-react";

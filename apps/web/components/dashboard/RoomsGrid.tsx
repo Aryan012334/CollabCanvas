@@ -96,7 +96,7 @@ export function RoomsGrid({ searchQuery }: RoomsGridProps) {
       </div>
     );
   }
-  const filteredRooms = (data?.rooms ?? []).filter((it: any) =>
+  const filteredRooms = (data?.rooms ?? []).filter((it: Room) =>
     it?.slug?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -126,7 +126,7 @@ export function RoomsGrid({ searchQuery }: RoomsGridProps) {
         </Empty>
       ) : (
         <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-          {filteredRooms.map((room: any) => (
+          {filteredRooms.map((room: Room) => (
             <RoomCard key={room.id} room={room} user={user} />
           ))}
         </div>
@@ -355,7 +355,10 @@ function RoomCard({ room, user }: { room: Room; user: UserLike | null }) {
                       title: toTitle(room.slug),
                       url: shareLink,
                     });
-                  } catch {}
+                  } catch (_) {
+                    // share cancelled or not supported — fall through to copy
+                    await copyLink();
+                  }
                 } else {
                   await copyLink();
                 }

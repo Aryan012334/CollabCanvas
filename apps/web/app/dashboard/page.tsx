@@ -1,7 +1,7 @@
 // app/dashboard/page.tsx
 "use client";
 
-import { useContext, useEffect, useState } from "react";
+import { useState } from "react";
 import { Header } from "@/components/dashboard/Header";
 import { SearchBar } from "@/components/dashboard/Searchbar";
 import { QuickActions } from "@/components/dashboard/QuickActions";

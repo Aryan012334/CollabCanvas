@@ -1,41 +1,38 @@
 import React from "react";
-
 import { Shape } from "@/app/board/types";
 import { StrokeControls } from "./StrokeControl";
 
 interface PropertyPanelProps {
   properties: Partial<Shape>;
-  onPropertyChange: (property: string, value: any) => void;
+  onPropertyChange: (property: string, value: unknown) => void;
   onClose: () => void;
 }
 
 const strokeColors = [
-  { name: "Black", value: "#262626" }, // neutral-800
-  { name: "Rose", value: "#fb7185" }, // rose-400
-  { name: "Mint", value: "#4ade80" }, // green-400
-  { name: "Sky", value: "#38bdf8" }, // sky-400
-  { name: "Peach", value: "#fca5a5" }, // red-300 / light coral
-  { name: "Lavender", value: "#a78bfa" }, // violet-400
-  { name: "Amber", value: "#fbbf24" }, // amber-400
-  { name: "Slate", value: "#94a3b8" }, // slate-400
+  { name: "Black",    value: "#262626" },
+  { name: "Rose",     value: "#fb7185" },
+  { name: "Mint",     value: "#4ade80" },
+  { name: "Sky",      value: "#38bdf8" },
+  { name: "Peach",    value: "#fca5a5" },
+  { name: "Lavender", value: "#a78bfa" },
+  { name: "Amber",    value: "#fbbf24" },
+  { name: "Slate",    value: "#94a3b8" },
 ];
 
 const fillColors = [
   { name: "Transparent", value: "transparent" },
-  { name: "Peach", value: "#ffe4e6" }, // rose-100
-  { name: "Mint", value: "#dcfce7" }, // green-100
-  { name: "Sky", value: "#e0f2fe" }, // sky-100
-  { name: "Lavender", value: "#ede9fe" }, // violet-100
-
-  { name: "Azure", value: "#cffafe" }, // cyan-100
-  { name: "Lilac", value: "#f3e8ff" }, // purple-100
-  { name: "Sand", value: "#fef3c7" }, // amber-100
+  { name: "Peach",       value: "#ffe4e6" },
+  { name: "Mint",        value: "#dcfce7" },
+  { name: "Sky",         value: "#e0f2fe" },
+  { name: "Lavender",    value: "#ede9fe" },
+  { name: "Azure",       value: "#cffafe" },
+  { name: "Lilac",       value: "#f3e8ff" },
+  { name: "Sand",        value: "#fef3c7" },
 ];
 
 const PropertyPanel: React.FC<PropertyPanelProps> = ({
   properties,
   onPropertyChange,
-  onClose,
 }) => {
   return (
     <div className='fixed left-6 top-1/2 -translate-y-1/2 z-50 w-68 rounded-xl border border-border bg-background/95 backdrop-blur-xl shadow-lg px-6 py-8 max-h-[calc(100vh-100px)] overflow-y-auto'>

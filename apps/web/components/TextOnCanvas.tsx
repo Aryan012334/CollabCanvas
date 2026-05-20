@@ -9,7 +9,6 @@ const TextOnCanvas = ({
   textInputRef,
   handleAddText,
   setIsEditingText,
-  isEditingText,
 }: {
   textPosition: {
     screen: { x: number; y: number };

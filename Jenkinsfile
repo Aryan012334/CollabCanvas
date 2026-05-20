@@ -26,7 +26,7 @@ pipeline {
     // ── Variables ──────────────────────────────────────────
     environment {
         // Your Docker Hub username — change this
-        DOCKER_USER = "yourdockerhubusername"
+        DOCKER_USER = "aryanyewale"
 
         // Image names (username/repo format for Docker Hub)
         IMAGE_HTTP = "${DOCKER_USER}/collabdraw-http"

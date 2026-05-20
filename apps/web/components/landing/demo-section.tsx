@@ -1,14 +1,12 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import React from "react";
 import {
   Share2,
   Lock,
   Code2,
-  GrabIcon,
-  LucideIcon,
   Hand,
-  RectangleCircle,
   RectangleVertical,
   Circle,
   ArrowBigDown,
@@ -73,7 +71,7 @@ function Toolbar() {
   );
 }
 
-function ToolbarDot({ label }: { label: any }) {
+function ToolbarDot({ label }: { label: React.ReactNode }) {
   return (
     <div className='inline-flex items-center gap-2 rounded-md bg-background px-3 py-1.5 text-sm shadow-sm ring-1 ring-border'>
       {/* <span className='size-2 rounded-full bg-primary' /> */}

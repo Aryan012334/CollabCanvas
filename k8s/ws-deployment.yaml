@@ -37,7 +37,7 @@ spec:
       containers:
         - name: ws-server
           # Replace with your actual image after pushing to ECR/Docker Hub
-          image: collabdraw-ws:latest
+          image: aryanyewale/collabdraw-ws:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 4000

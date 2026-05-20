@@ -3,7 +3,6 @@ import { repaintRect, repaintCircle, repaintLine, repaintDiamond, repaintArrow, 
 import { getAllShapesInRoom } from "@/actions/action";
 
 export let allDrawings: Shape[] = [];
-let currentPoints: { x: number; y: number }[] = [];
 
 /** Call this when leaving a room to prevent stale shapes on next mount. */
 export function clearAllDrawings() {
@@ -102,7 +101,7 @@ function renderPreviousShapes(
     ctx.scale(zoom, zoom);
 
     // Draw all shapes
-    allDrawings.forEach((shape, index) => {
+    allDrawings.forEach((shape) => {
         switch (shape.type) {
             case "RECTANGLE":
                 repaintRect(ctx, shape);
@@ -141,12 +140,11 @@ function renderPreviousShapes(
 
 export async function initDrawing(
     canvas: HTMLCanvasElement,
-    send: (data: any) => void,
+    send: (data: Record<string, unknown>) => void,
     roomId: number,
-    getSelectedTool: () => ToolType,  // Changed to function
-    getCurrentProperties: () => Partial<Shape>,  // Changed to function
+    getSelectedTool: () => ToolType,
+    getCurrentProperties: () => Partial<Shape>,
     zoomContext: ZoomContext,
-    // onShapeCreated: (id: number) => void,
     onShapeSelected: (id: number | null) => void,
     onTextEdit: (index: number, shape: Shape) => void,
     panZoomHandlers: {
@@ -162,7 +160,7 @@ export async function initDrawing(
     async function getAllShapes() {
         const res = await getAllShapesInRoom(roomId);
         // Normalize nullable DB fields to safe defaults so rendering never crashes
-        allDrawings = (res ?? []).map((s: any) => ({
+        allDrawings = (res ?? []).map((s: Shape & { startX?: number | null; startY?: number | null; width?: number | null; height?: number | null }) => ({
             ...s,
             startX: s.startX ?? 0,
             startY: s.startY ?? 0,
@@ -276,7 +274,6 @@ export async function initDrawing(
 
     const handleMouseDown = (e: MouseEvent) => {
         const selectedTool = getSelectedTool();
-        const rect = canvas.getBoundingClientRect();
 
         // Hand mode - panning
         if (selectedTool === "hand") {
@@ -657,7 +654,7 @@ export function renderCanvas(
 
 
 // Export function to update a specific shape's property
-export function updateShapeProperty(shapeId: number, property: keyof Shape, value: any, send: (data: any) => void, roomId: number) {
+export function updateShapeProperty(shapeId: number, property: keyof Shape, value: unknown, send: (data: Record<string, unknown>) => void, roomId: number) {
     if (shapeId >= 0) {
         const shape = allDrawings.find(d => d.id === shapeId);
         if (!shape) return;

@@ -30,7 +30,7 @@ spec:
         - name: http-backend
           # Replace with your actual image name after pushing to ECR or Docker Hub
           # e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/collabdraw-http:latest
-          image: collabdraw-http:latest
+          image: aryanyewale/collabdraw-http:latest
           imagePullPolicy: IfNotPresent   # Use local image if available (good for testing)
           ports:
             - containerPort: 3001
