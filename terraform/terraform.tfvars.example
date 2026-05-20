@@ -1,0 +1,41 @@
+# ============================================================
+# terraform.tfvars.example
+#
+# WHAT: Example values for all variables.
+#
+# HOW TO USE:
+#   1. Copy this file:  cp terraform.tfvars.example terraform.tfvars
+#   2. Edit terraform.tfvars with your actual values
+#   3. NEVER commit terraform.tfvars to Git (it may contain secrets)
+#      It is already in .gitignore
+#
+# terraform.tfvars is automatically loaded by Terraform.
+# ============================================================
+
+# AWS region — change to your nearest region
+# Common options: us-east-1, us-west-2, eu-west-1, ap-south-1
+aws_region = "us-east-1"
+
+# EKS cluster name — shows up in AWS console
+cluster_name = "collabdraw-cluster"
+
+# Kubernetes version — check AWS docs for latest supported version
+cluster_version = "1.30"
+
+# EC2 instance type for worker nodes
+# t3.medium = 2 vCPU, 4GB RAM = good for student project
+# t3.small  = 2 vCPU, 2GB RAM = cheaper but may be tight
+# t3.large  = 2 vCPU, 8GB RAM = more headroom
+node_instance_type = "t3.medium"
+
+# Node scaling
+node_min     = 1   # minimum nodes (scale down when idle to save cost)
+node_max     = 3   # maximum nodes
+node_desired = 2   # nodes at startup
+
+# VPC network range — 10.0.0.0/16 gives 65,536 IP addresses
+# No need to change this for a student project
+vpc_cidr = "10.0.0.0/16"
+
+# Project name — used as prefix on all AWS resource names
+project_name = "collabdraw"

@@ -1100,3 +1100,217 @@ AWS ALB  (created by Ingress + AWS Load Balancer Controller)
 | Monitoring | Prometheus + Grafana | Collect and visualize metrics from all pods |
 | Database | PostgreSQL + Prisma | Persistent storage with schema migrations |
 | Image registry | Docker Hub / ECR | Store and version Docker images |
+
+
+---
+
+## 15. Local Kubernetes Testing (Docker Desktop)
+
+### Setup
+
+Docker Desktop has Kubernetes built in. Enable it:
+1. Open Docker Desktop → Settings (gear icon)
+2. Click **Kubernetes** in the left sidebar
+3. Tick **Enable Kubernetes** → **Apply & Restart**
+4. Wait ~2 minutes for the green Kubernetes indicator
+
+Verify:
+```bash
+kubectl get nodes
+# NAME             STATUS   ROLES           AGE   VERSION
+# docker-desktop   Ready    control-plane   ...   v1.34.x
+```
+
+### Install nginx Ingress Controller (one-time)
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
+```
+
+If the ingress fails to apply with a webhook error, delete the webhook and retry:
+```bash
+kubectl delete -A ValidatingWebhookConfiguration ingress-nginx-admission
+kubectl apply -f k8s/ingress.yaml
+```
+
+### Deploy the App
+
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/secret.yaml
+kubectl apply -f k8s/postgres-deployment.yaml
+kubectl apply -f k8s/postgres-service.yaml
+kubectl apply -f k8s/http-deployment.yaml
+kubectl apply -f k8s/http-service.yaml
+kubectl apply -f k8s/ws-deployment.yaml
+kubectl apply -f k8s/ws-service.yaml
+kubectl apply -f k8s/frontend-deployment.yaml
+kubectl apply -f k8s/frontend-service.yaml
+kubectl apply -f k8s/ingress.yaml
+```
+
+### Run Migrations
+
+```bash
+kubectl exec -n collabdraw deployment/http-backend -- sh -c \
+  "packages/db/node_modules/.bin/prisma migrate deploy --schema=packages/db/prisma/schema.prisma"
+```
+
+### Verify
+
+```bash
+kubectl get pods -n collabdraw
+# All pods should show 1/1 Running
+
+# Test endpoints
+curl http://localhost          # frontend → 200 OK
+curl http://localhost/api/health  # backend → 200 OK
+```
+
+Open **http://localhost** in your browser — the full app runs through Kubernetes.
+
+### Verified Results
+
+| Check | Result |
+|-------|--------|
+| postgres pod | 1/1 Running |
+| http-backend pods (×2) | 1/1 Running |
+| ws-server pod | 1/1 Running |
+| frontend pods (×2) | 1/1 Running |
+| `http://localhost` | HTTP 200 ✅ |
+| `http://localhost/api/health` | HTTP 200 ✅ |
+| Prisma migrations | Applied ✅ |
+
+### Traffic Flow (Local)
+
+```
+Browser
+  │
+  ▼
+nginx Ingress (localhost:80)
+  │
+  ├── /api/*  → http-backend Service (ClusterIP :3001) → Express pods
+  ├── /ws     → ws-server Service (ClusterIP :4000)    → WebSocket pod
+  └── /       → frontend Service (ClusterIP :3000)     → Next.js pods
+                                                              │
+                                                       postgres Service
+                                                       (ClusterIP :5432)
+```
+
+### Switching to AWS EKS
+
+The only change needed is the ingress annotations. Replace:
+```yaml
+kubernetes.io/ingress.class: "nginx"
+ingressClassName: nginx
+```
+With:
+```yaml
+kubernetes.io/ingress.class: alb
+alb.ingress.kubernetes.io/scheme: internet-facing
+alb.ingress.kubernetes.io/target-type: ip   # required for WebSocket
+```
+
+Everything else (deployments, services, configmap, secret) is identical between local and EKS.
+
+### Teardown
+
+```bash
+# Remove everything
+kubectl delete namespace collabdraw
+
+# Remove nginx ingress controller
+kubectl delete namespace ingress-nginx
+```
+
+
+---
+
+## 16. Terraform + AWS EKS
+
+### What Terraform Does
+
+Terraform is an Infrastructure-as-Code tool. Instead of clicking through the AWS console to create a VPC, EKS cluster, and ECR repositories, you write code that describes what you want and Terraform creates it.
+
+```
+You write:  terraform/vpc.tf, eks.tf, main.tf
+You run:    terraform apply
+Terraform:  creates VPC + EKS + ECR in AWS automatically
+```
+
+### File Structure
+
+```
+terraform/
+├── provider.tf          ← "use AWS in us-east-1"
+├── variables.tf         ← configurable settings (region, instance type)
+├── vpc.tf               ← network: VPC, subnets, internet gateway
+├── eks.tf               ← EKS cluster + worker nodes + ALB IAM role
+├── main.tf              ← ECR repositories for Docker images
+├── outputs.tf           ← prints useful values after apply
+└── terraform.tfvars.example  ← copy to terraform.tfvars
+```
+
+### Quick Start
+
+```bash
+# 1. Install: Terraform, AWS CLI, Helm
+# 2. Configure AWS
+aws configure
+
+# 3. Set up variables
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+# edit terraform.tfvars if needed (defaults work fine)
+
+# 4. Create infrastructure (~15-20 min)
+terraform init
+terraform plan
+terraform apply
+
+# 5. Connect kubectl
+aws eks update-kubeconfig --region us-east-1 --name collabdraw-cluster
+
+# 6. Install ALB Controller
+helm repo add eks https://aws.github.io/eks-charts && helm repo update
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName=collabdraw-cluster \
+  --set serviceAccount.create=false \
+  --set serviceAccount.name=aws-load-balancer-controller
+
+# 7. Push images to ECR, update k8s YAMLs, deploy
+kubectl apply -f k8s/
+
+# 8. Get public URL
+kubectl get ingress -n collabdraw
+```
+
+Full step-by-step guide: `terraform/README.md`
+
+### What Gets Created in AWS
+
+```
+VPC (10.0.0.0/16)
+├── Public Subnet 1 (AZ a)  ← EKS nodes + ALB
+├── Public Subnet 2 (AZ b)  ← EKS nodes + ALB
+├── Internet Gateway
+└── EKS Cluster
+    ├── Control Plane (AWS managed, ~$72/month)
+    └── Node Group: 2× t3.medium EC2 (~$60/month)
+
+ECR Repositories
+├── collabdraw-http
+├── collabdraw-ws
+└── collabdraw-web
+```
+
+### Tear Down (Stop All Charges)
+
+```bash
+kubectl delete namespace collabdraw   # removes ALB first
+cd terraform && terraform destroy     # destroys all AWS resources
+```
+
+Always delete Kubernetes resources before destroying Terraform — AWS won't delete a VPC that still has an active load balancer.

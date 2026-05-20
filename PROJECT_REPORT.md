@@ -348,3 +348,51 @@ Room membership is in-memory only. If WS server restarts, all room state is lost
 - `turbo.json` — added NEXT_PUBLIC_SOCKET_URL to build env
 - `.env.example` — updated to match actual vars
 - `.dockerignore` — added tsbuildinfo
+
+
+---
+
+## DevOps Infrastructure (Added)
+
+### Docker
+
+All three services are fully Dockerized with multi-stage builds:
+
+| Image | Built from | Port |
+|-------|-----------|------|
+| `aryanyewale/collabdraw-http` | `apps/http-backend/Dockerfile` | 3001 |
+| `aryanyewale/collabdraw-ws` | `apps/ws-server/Dockerfile` | 4000 |
+| `aryanyewale/collabdraw-web` | `apps/web/Dockerfile` | 3000 |
+
+Run the full stack locally:
+```bash
+docker compose up --build
+# Frontend: http://localhost:3000
+# API:      http://localhost:3001
+# WS:       ws://localhost:4000
+```
+
+### Kubernetes
+
+All manifests in `k8s/`. Tested locally on Docker Desktop Kubernetes.
+
+```bash
+kubectl apply -f k8s/
+# Frontend: http://localhost  (via nginx ingress on port 80)
+# API:      http://localhost/api/health
+```
+
+For AWS EKS: swap nginx ingress annotations for ALB annotations (documented in `k8s/ingress.yaml`).
+
+### CI/CD
+
+`Jenkinsfile` at repo root. Pipeline: git push → build images → push to Docker Hub → rolling deploy to Kubernetes.
+
+### Monitoring
+
+`k8s/monitoring.yaml` deploys Prometheus + Grafana to the `monitoring` namespace.
+
+### Full Documentation
+
+- `DEVOPS.md` — complete DevOps guide with all commands
+- `CHANGES.md` — full change log of everything fixed and built
