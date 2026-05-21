@@ -362,3 +362,152 @@ terraform destroy
 Type `yes` when prompted. Takes ~10 minutes.
 
 **Important:** Always run `kubectl delete namespace collabdraw` BEFORE `terraform destroy`. If you destroy the VPC while the ALB still exists, Terraform can get stuck because AWS won't delete a VPC with active load balancers.
+
+
+---
+
+## Issues Encountered During Real EKS Deployment
+
+These are real issues we hit and fixed — useful for viva/presentation.
+
+### Issue 1 — t3.medium Not Eligible on Free Tier Account
+
+**Error:**
+```
+The specified instance type is not eligible for Free Tier.
+```
+
+**Root cause:** AWS Free Tier accounts restrict which EC2 instance types can be launched. `t3.medium` is not Free Tier eligible.
+
+**Fix:** Delete the failed node group and recreate with `t3.small`:
+```powershell
+eksctl delete nodegroup --cluster collabdraw-cluster --name workers --region ap-south-1
+eksctl create nodegroup --cluster collabdraw-cluster --name workers --region ap-south-1 --node-type t3.small --nodes 2 --managed
+```
+
+---
+
+### Issue 2 — Postgres PVC Stuck Pending
+
+**Error:**
+```
+no persistent volumes available for this claim and no storage class is set
+```
+
+**Root cause:** The PVC had no `storageClassName`. EKS does not set a default storage class automatically. Without it, Kubernetes doesn't know which provisioner to use.
+
+**Fix:** Add `storageClassName: gp2` to the PVC spec in `postgres-deployment.yaml`:
+```yaml
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp2
+  resources:
+    requests:
+      storage: 1Gi
+```
+
+---
+
+### Issue 3 — Postgres Pod Crashing (lost+found)
+
+**Error:**
+```
+initdb: error: directory "/var/lib/postgresql/data" exists but is not empty
+initdb: detail: It contains a lost+found directory
+```
+
+**Root cause:** When Linux formats an EBS volume as ext4, it creates a `lost+found` directory at the root. Postgres refuses to initialize in a non-empty directory.
+
+**Fix:** Add `PGDATA` env var to point Postgres to a subdirectory:
+```yaml
+env:
+  - name: PGDATA
+    value: /var/lib/postgresql/data/pgdata
+```
+
+---
+
+### Issue 4 — EBS CSI Driver Not Provisioning Volumes
+
+**Error:**
+```
+not authorized to perform: ec2:DescribeAvailabilityZones
+```
+
+**Root cause:** The EBS CSI driver runs on the worker nodes and needs IAM permissions to call EC2 APIs. The node instance role didn't have the required policy.
+
+**Fix:**
+```powershell
+# Install the addon
+eksctl create addon --name aws-ebs-csi-driver --cluster collabdraw-cluster --region ap-south-1 --force
+
+# Attach the policy to the node role
+$ROLE = aws iam list-roles --query "Roles[?contains(RoleName, 'NodeInstanceRole')].RoleName" --output text
+aws iam attach-role-policy --role-name $ROLE --policy-arn "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+
+# Restart the controller to pick up new permissions
+kubectl rollout restart deployment/ebs-csi-controller -n kube-system
+```
+
+---
+
+### Issue 5 — ALB Not Created (AccessDenied)
+
+**Error:**
+```
+not authorized to perform: elasticloadbalancing:DescribeLoadBalancers
+not authorized to perform: elasticloadbalancing:DescribeListenerAttributes
+```
+
+**Root cause:** The AWS Load Balancer Controller runs on the worker nodes and needs IAM permissions to create and manage ALBs. The node role was missing ELB permissions.
+
+**Fix:**
+```powershell
+# Create the custom ALB policy (one-time)
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.7.2/docs/install/iam_policy.json" -OutFile "alb-policy.json"
+aws iam create-policy --policy-name AWSLoadBalancerControllerIAMPolicy --policy-document file://alb-policy.json
+
+# Attach all required policies
+aws iam attach-role-policy --role-name $ROLE --policy-arn "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess"
+aws iam attach-role-policy --role-name $ROLE --policy-arn "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+aws iam attach-role-policy --role-name $ROLE --policy-arn "arn:aws:iam::494487213388:policy/AWSLoadBalancerControllerIAMPolicy"
+
+# Restart controller
+kubectl rollout restart deployment/aws-load-balancer-controller -n kube-system
+```
+
+---
+
+### Issue 6 — Frontend Showing Wrong API URL
+
+**Root cause:** `NEXT_PUBLIC_*` variables are baked into the JavaScript bundle at build time. The first frontend image was built with placeholder URLs. After getting the real ALB DNS, the image must be rebuilt.
+
+**Fix:** Rebuild and push the frontend image with the real ALB DNS:
+```powershell
+docker build `
+  --build-arg NEXT_PUBLIC_API_URL=http://YOUR-ALB-DNS/api `
+  --build-arg NEXT_PUBLIC_SOCKET_URL=ws://YOUR-ALB-DNS/ws `
+  --build-arg NEXT_PUBLIC_SITE_URL=http://YOUR-ALB-DNS `
+  -f apps/web/Dockerfile `
+  -t 494487213388.dkr.ecr.ap-south-1.amazonaws.com/collabdraw-web:latest .
+docker push 494487213388.dkr.ecr.ap-south-1.amazonaws.com/collabdraw-web:latest
+kubectl rollout restart deployment/frontend -n collabdraw
+```
+
+---
+
+## Verified Live Results
+
+| Check | Result |
+|-------|--------|
+| EKS cluster | ACTIVE ✅ |
+| Worker nodes (2× t3.small) | Ready ✅ |
+| All 6 pods | 1/1 Running ✅ |
+| EBS volume (Postgres) | Bound ✅ |
+| ALB created | ✅ |
+| Frontend HTTP 200 | ✅ |
+| Backend reachable | ✅ |
+| Prisma migrations | Applied ✅ |
+
+**Live URL:** `http://k8s-collabdr-collabdr-0c35dcb652-657159459.ap-south-1.elb.amazonaws.com`

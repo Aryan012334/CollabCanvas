@@ -35,9 +35,8 @@ spec:
     spec:
       containers:
         - name: frontend
-          # Replace with your actual image after pushing to ECR/Docker Hub
-          image: aryanyewale/collabdraw-web:latest
-          imagePullPolicy: IfNotPresent
+          image: 494487213388.dkr.ecr.ap-south-1.amazonaws.com/collabdraw-web:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 3000
           env:

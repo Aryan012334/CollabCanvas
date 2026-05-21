@@ -396,3 +396,116 @@ For AWS EKS: swap nginx ingress annotations for ALB annotations (documented in `
 
 - `DEVOPS.md` — complete DevOps guide with all commands
 - `CHANGES.md` — full change log of everything fixed and built
+
+
+---
+
+## Complete DevOps Infrastructure
+
+### Overview
+
+CollabDraw has a full DevOps pipeline from local development to live AWS EKS deployment.
+
+```
+Developer Machine
+  │
+  ├── pnpm dev              → local development (ports 3000/3001/4000)
+  ├── docker compose up     → full stack in Docker (same ports)
+  └── kubectl apply -f k8s/ → Kubernetes (local: port 80, EKS: ALB DNS)
+                                    │
+                              AWS EKS Cluster
+                              ├── ALB (public entry point)
+                              ├── frontend pods (Next.js)
+                              ├── http-backend pods (Express)
+                              ├── ws-server pod (WebSocket)
+                              └── postgres pod (EBS volume)
+```
+
+### Docker
+
+Three multi-stage Dockerfiles — one per service. Each has:
+- **Stage 1 (builder):** Install pnpm → compile TypeScript → JavaScript
+- **Stage 2 (runner):** Copy compiled output only → run it
+
+Key fix: `.dockerignore` must include `**/node_modules` — Windows symlinks break Linux containers.
+
+Run locally:
+```bash
+docker compose up --build
+```
+
+### Kubernetes
+
+13 YAML manifests in `k8s/`. Key concepts:
+- **Deployment** — runs pods, restarts on crash
+- **Service** — stable DNS name for pods
+- **ConfigMap** — non-sensitive config
+- **Secret** — passwords/keys (base64)
+- **PVC** — persistent storage (EBS on AWS)
+- **Ingress** — public entry point, path-based routing
+
+Run locally (Docker Desktop):
+```bash
+kubectl apply -f k8s/
+```
+
+### AWS EKS (Live)
+
+**Live URL:** `http://k8s-collabdr-collabdr-0c35dcb652-657159459.ap-south-1.elb.amazonaws.com`
+
+- Region: `ap-south-1` (Mumbai)
+- Cluster: `collabdraw-cluster`
+- Nodes: 2× `t3.small` EC2
+- Images stored in ECR: `collabdraw-http`, `collabdraw-ws`, `collabdraw-web`
+
+Traffic flow:
+```
+Browser → AWS ALB → Ingress
+  /api/*  → http-backend (Express)
+  /ws     → ws-server (WebSocket)
+  /       → frontend (Next.js)
+```
+
+### Terraform
+
+Infrastructure-as-Code in `terraform/`. Creates VPC, EKS cluster, ECR repos.
+
+```bash
+cd terraform
+terraform init && terraform apply
+```
+
+### Jenkins CI/CD
+
+`Jenkinsfile` at repo root. Pipeline:
+```
+git push → build images → push to Docker Hub → kubectl set image → rolling deploy
+```
+
+### Monitoring
+
+`k8s/monitoring.yaml` deploys Prometheus + Grafana to `monitoring` namespace.
+
+```bash
+kubectl port-forward svc/grafana 3001:3000 -n monitoring
+# Open: http://localhost:3001
+```
+
+### Tools Installed
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| kubectl | v1.34.1 | Kubernetes CLI |
+| eksctl | 0.226.0 | EKS cluster management |
+| helm | v3.17.3 | Kubernetes package manager |
+| docker | 29.1.3 | Container runtime |
+| aws CLI | 2.34.50 | AWS management |
+
+### Complete Documentation
+
+| File | Contents |
+|------|---------|
+| `DEVOPS.md` | Full DevOps guide — Docker, K8s, EKS, Jenkins, Prometheus |
+| `CHANGES.md` | Every bug fixed, feature built, file modified |
+| `EKS_RESTART.md` | Step-by-step guide to recreate the EKS cluster |
+| `terraform/README.md` | Terraform + EKS deployment guide |

@@ -1314,3 +1314,143 @@ cd terraform && terraform destroy     # destroys all AWS resources
 ```
 
 Always delete Kubernetes resources before destroying Terraform — AWS won't delete a VPC that still has an active load balancer.
+
+
+---
+
+## 17. AWS EKS — Live Deployment Summary
+
+### What Was Deployed
+
+CollabDraw is live on AWS EKS in `ap-south-1` (Mumbai).
+
+**Live URL:** `http://k8s-collabdr-collabdr-0c35dcb652-657159459.ap-south-1.elb.amazonaws.com`
+
+### AWS Architecture
+
+```
+AWS Account (494487213388) — ap-south-1
+│
+├── VPC (eksctl-created)
+│   ├── Public Subnet 1 (AZ a) — EKS nodes + ALB
+│   ├── Public Subnet 2 (AZ b) — EKS nodes + ALB
+│   └── Public Subnet 3 (AZ c) — EKS nodes + ALB
+│
+├── EKS Cluster: collabdraw-cluster (Kubernetes 1.34)
+│   ├── Control Plane (AWS managed)
+│   └── Node Group: workers (2× t3.small EC2)
+│
+├── ECR Repositories
+│   ├── collabdraw-http  (Express API image)
+│   ├── collabdraw-ws    (WebSocket image)
+│   └── collabdraw-web   (Next.js image)
+│
+└── AWS ALB (created by ALB Controller from ingress.yaml)
+    └── k8s-collabdr-collabdr-0c35dcb652-657159459.ap-south-1.elb.amazonaws.com
+```
+
+### IAM Policies on Node Role
+
+The node instance role needs these policies for the cluster to work:
+
+| Policy | Why needed |
+|--------|-----------|
+| `AmazonEBSCSIDriverPolicy` | EBS CSI driver can provision EBS volumes for PVCs |
+| `ElasticLoadBalancingFullAccess` | ALB Controller can create/manage ALBs |
+| `AmazonEC2FullAccess` | ALB Controller can manage security groups |
+| `AWSLoadBalancerControllerIAMPolicy` | Custom policy for ALB Controller (created manually) |
+
+### Issues Fixed During EKS Deployment
+
+**1. t3.medium not eligible on Free Tier**
+- Error: `The specified instance type is not eligible for Free Tier`
+- Fix: Deleted failed node group, recreated with `t3.small`
+
+**2. Postgres PVC stuck Pending**
+- Error: `no persistent volumes available and no storage class is set`
+- Root cause: PVC had no `storageClassName` — EKS doesn't have a default
+- Fix: Added `storageClassName: gp2` to PVC spec
+
+**3. Postgres pod crashing**
+- Error: `directory "/var/lib/postgresql/data" exists but is not empty — contains lost+found`
+- Root cause: EBS volumes have a `lost+found` directory at root (created by Linux ext4 filesystem). Postgres refuses to initialize in a non-empty directory.
+- Fix: Added `PGDATA: /var/lib/postgresql/data/pgdata` env var — Postgres uses a subdirectory instead of the mount root
+
+**4. EBS CSI driver not provisioning volumes**
+- Error: `not authorized to perform: ec2:DescribeAvailabilityZones`
+- Root cause: `AmazonEBSCSIDriverPolicy` not attached to node role
+- Fix: Attached policy + restarted EBS CSI controller pods
+
+**5. ALB not created (AccessDenied)**
+- Error: `not authorized to perform: elasticloadbalancing:DescribeLoadBalancers`
+- Root cause: Node role missing ELB permissions
+- Fix: Attached `ElasticLoadBalancingFullAccess` + `AmazonEC2FullAccess` + custom ALB policy, restarted ALB controller
+
+**6. Frontend showing wrong API URL**
+- Root cause: `NEXT_PUBLIC_*` URLs are baked into the JS bundle at build time. The first build used placeholder URLs.
+- Fix: Rebuilt frontend image with real ALB DNS after getting it from `kubectl get ingress`
+
+### Why NEXT_PUBLIC_* Must Be Rebuilt Each Time
+
+```
+Next.js bakes NEXT_PUBLIC_* into the JavaScript bundle at BUILD TIME.
+The browser needs to know the API URL before the page loads.
+These cannot be changed at runtime — they're compiled into the JS files.
+
+So every time the ALB DNS changes (new cluster = new DNS),
+you must rebuild the frontend Docker image with the new URL.
+```
+
+### Complete Deployment Commands (Reference)
+
+```powershell
+# 1. Create cluster
+eksctl create cluster --name collabdraw-cluster --region ap-south-1 \
+  --nodegroup-name workers --node-type t3.small --nodes 2 --managed
+
+# 2. Connect kubectl
+aws eks update-kubeconfig --name collabdraw-cluster --region ap-south-1
+
+# 3. Install EBS CSI + attach policies
+eksctl create addon --name aws-ebs-csi-driver --cluster collabdraw-cluster --region ap-south-1 --force
+$ROLE = aws iam list-roles --query "Roles[?contains(RoleName, 'NodeInstanceRole')].RoleName" --output text
+aws iam attach-role-policy --role-name $ROLE --policy-arn "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+aws iam attach-role-policy --role-name $ROLE --policy-arn "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess"
+aws iam attach-role-policy --role-name $ROLE --policy-arn "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+aws iam attach-role-policy --role-name $ROLE --policy-arn "arn:aws:iam::494487213388:policy/AWSLoadBalancerControllerIAMPolicy"
+
+# 4. Install ALB Controller
+$VPC_ID = aws eks describe-cluster --name collabdraw-cluster --region ap-south-1 --query "cluster.resourcesVpcConfig.vpcId" --output text
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller -n kube-system \
+  --set clusterName=collabdraw-cluster --set serviceAccount.create=true \
+  --set region=ap-south-1 --set vpcId=$VPC_ID
+
+# 5. Push images to ECR
+aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 494487213388.dkr.ecr.ap-south-1.amazonaws.com
+docker build -f apps/http-backend/Dockerfile -t 494487213388.dkr.ecr.ap-south-1.amazonaws.com/collabdraw-http:latest .
+docker push 494487213388.dkr.ecr.ap-south-1.amazonaws.com/collabdraw-http:latest
+docker build -f apps/ws-server/Dockerfile -t 494487213388.dkr.ecr.ap-south-1.amazonaws.com/collabdraw-ws:latest .
+docker push 494487213388.dkr.ecr.ap-south-1.amazonaws.com/collabdraw-ws:latest
+
+# 6. Deploy app
+kubectl apply -f k8s/
+kubectl exec -n collabdraw deployment/http-backend -- sh -c \
+  "packages/db/node_modules/.bin/prisma migrate deploy --schema=packages/db/prisma/schema.prisma"
+
+# 7. Get ALB URL
+kubectl get ingress -n collabdraw
+
+# 8. Rebuild frontend with real ALB URL
+docker build --build-arg NEXT_PUBLIC_API_URL=http://YOUR-ALB-DNS/api \
+  --build-arg NEXT_PUBLIC_SOCKET_URL=ws://YOUR-ALB-DNS/ws \
+  --build-arg NEXT_PUBLIC_SITE_URL=http://YOUR-ALB-DNS \
+  -f apps/web/Dockerfile -t 494487213388.dkr.ecr.ap-south-1.amazonaws.com/collabdraw-web:latest .
+docker push 494487213388.dkr.ecr.ap-south-1.amazonaws.com/collabdraw-web:latest
+kubectl rollout restart deployment/frontend -n collabdraw
+
+# 9. Tear down (stop charges)
+kubectl delete namespace collabdraw
+eksctl delete cluster --name collabdraw-cluster --region ap-south-1
+```
+
+See `EKS_RESTART.md` for the complete restart guide.

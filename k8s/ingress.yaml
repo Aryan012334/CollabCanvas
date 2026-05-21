@@ -1,21 +1,16 @@
 # ============================================================
-# ingress.yaml
-#
-# Routes all external traffic into the cluster.
-#
-# LOCAL TESTING (Docker Desktop / minikube):
-#   Uses nginx ingress controller.
-#   Install with: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
-#
-# AWS EKS PRODUCTION:
-#   Swap the annotations block to use AWS ALB (see bottom of file).
+# ingress.yaml — AWS EKS version (ALB)
 #
 # TRAFFIC FLOW:
-#   Browser → nginx Ingress → Service → Pod
+#   Browser → AWS ALB (auto-created by ALB Controller)
+#     /api/*  → http-backend:3001  (strips /api prefix)
+#     /ws     → ws-server:4000     (WebSocket upgrade)
+#     /       → frontend:3000
 #
-#   /api/*  → http-backend:3001  (strips /api prefix)
-#   /ws     → ws-server:4000     (WebSocket upgrade)
-#   /       → frontend:3000      (everything else)
+# WEBSOCKET NOTE:
+#   target-type: ip is REQUIRED for WebSocket.
+#   Without it, the ALB uses instance mode which breaks
+#   the WebSocket upgrade handshake.
 # ============================================================
 
 apiVersion: networking.k8s.io/v1
@@ -24,36 +19,26 @@ metadata:
   name: collabdraw-ingress
   namespace: collabdraw
   annotations:
-    # Use the nginx ingress controller (works locally + on EKS with nginx)
-    kubernetes.io/ingress.class: "nginx"
-
-    # Strip /api prefix before forwarding to the backend.
-    # e.g. /api/rooms → /rooms  (what Express actually expects)
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
-
-    # Required for WebSocket connections through nginx ingress.
-    # Tells nginx to upgrade the HTTP connection to WebSocket.
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
 
 spec:
-  ingressClassName: nginx
   rules:
     - http:
         paths:
 
-          # ── REST API ───────────────────────────────────────
-          # /api/anything → http-backend (with /api stripped)
-          - path: /api(/|$)(.*)
-            pathType: ImplementationSpecific
+          # REST API — /api/* → http-backend
+          - path: /api
+            pathType: Prefix
             backend:
               service:
                 name: http-backend
                 port:
                   number: 3001
 
-          # ── WebSocket ──────────────────────────────────────
-          # /ws → ws-server (connection upgraded to WebSocket)
+          # WebSocket — /ws → ws-server
           - path: /ws
             pathType: Prefix
             backend:
@@ -62,8 +47,7 @@ spec:
                 port:
                   number: 4000
 
-          # ── Frontend (catch-all) ───────────────────────────
-          # Everything else → Next.js frontend
+          # Frontend — everything else → Next.js
           - path: /
             pathType: Prefix
             backend:
@@ -71,26 +55,3 @@ spec:
                 name: frontend
                 port:
                   number: 3000
-
-# ============================================================
-# FOR AWS EKS — replace the ENTIRE metadata.annotations block
-# and spec.ingressClassName with:
-#
-# metadata:
-#   annotations:
-#     kubernetes.io/ingress.class: alb
-#     alb.ingress.kubernetes.io/scheme: internet-facing
-#     alb.ingress.kubernetes.io/target-type: ip
-#     # rewrite-target is handled by ALB listener rules, not needed here
-#
-# spec:
-#   # remove ingressClassName: nginx
-#   rules:
-#     ... (paths stay the same)
-#
-# The /api rewrite (stripping the prefix) must be handled
-# differently on ALB — use a separate listener rule or
-# configure Express to accept /api/* paths directly.
-# Simplest fix: remove the rewrite and update Express routes
-# to accept /api/health, /api/rooms, etc.
-# ============================================================
