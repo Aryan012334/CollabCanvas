@@ -27,7 +27,7 @@ app.get("/health", async (_, res) => {
   } catch (err) {
     console.error("WS health failed:", err);
 
-    res.status(500).json({
+  res.status(500).json({`!Az`
       status: "error",
     });
   }

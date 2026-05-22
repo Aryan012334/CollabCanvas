@@ -1,74 +1,102 @@
 // ============================================================
 // Jenkinsfile — CollabDraw CI/CD Pipeline
 //
-// WHAT THIS DOES:
-// Every time you push code to GitHub, Jenkins automatically:
-//   1. Pulls the latest code
-//   2. Builds Docker images for all three services
-//   3. Pushes images to Docker Hub
-//   4. Deploys the new images to Kubernetes (EKS)
+// FLOW:
+//   git push → GitHub webhook → Jenkins
+//     Stage 1: Checkout       — pull latest code
+//     Stage 2: Build Images   — docker build all 3 services
+//     Stage 3: Push to ECR    — push to AWS Elastic Container Registry
+//     Stage 4: Deploy to EKS  — kubectl set image (rolling update)
 //
-// PIPELINE STAGES:
-//   Checkout → Build Images → Push Images → Deploy to K8s
+// JENKINS CREDENTIALS REQUIRED:
+//   "aws-credentials"  → AWS Access Key ID + Secret (type: AWS Credentials)
+//   "kubeconfig"       → contents of ~/.kube/config (type: Secret file)
 //
-// PREREQUISITES (configure in Jenkins):
-//   - Credential ID "dockerhub-creds"  → Docker Hub username + password
-//   - Credential ID "kubeconfig"       → your ~/.kube/config file content
-//   - Docker installed on Jenkins agent
-//   - kubectl installed on Jenkins agent
+// JENKINS PLUGINS REQUIRED:
+//   - Pipeline
+//   - AWS Credentials Plugin
+//   - Docker Pipeline
+//   - Kubernetes CLI Plugin
 // ============================================================
 
 pipeline {
 
-    // Run on any available Jenkins agent
     agent any
 
-    // ── Variables ──────────────────────────────────────────
+    // ── Environment Variables ──────────────────────────────
     environment {
-        // Your Docker Hub username — change this
-        DOCKER_USER = "aryanyewale"
+        // AWS configuration
+        AWS_ACCOUNT_ID = "494487213388"
+        AWS_REGION     = "ap-south-1"
 
-        // Image names (username/repo format for Docker Hub)
-        IMAGE_HTTP = "${DOCKER_USER}/collabdraw-http"
-        IMAGE_WS   = "${DOCKER_USER}/collabdraw-ws"
-        IMAGE_WEB  = "${DOCKER_USER}/collabdraw-web"
+        // ECR registry URL (account.dkr.ecr.region.amazonaws.com)
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-        // Tag images with the Git commit hash so every build is unique
-        // e.g. yourdockerhubusername/collabdraw-http:a1b2c3d
+        // ECR image names
+        IMAGE_HTTP = "${ECR_REGISTRY}/collabdraw-http"
+        IMAGE_WS   = "${ECR_REGISTRY}/collabdraw-ws"
+        IMAGE_WEB  = "${ECR_REGISTRY}/collabdraw-web"
+
+        // Tag every image with the short Git commit hash
+        // This makes every build uniquely identifiable and rollback possible
+        // e.g. 494487213388.dkr.ecr.ap-south-1.amazonaws.com/collabdraw-http:a1b2c3d
         IMAGE_TAG = "${env.GIT_COMMIT.take(7)}"
 
-        // The Kubernetes namespace where CollabDraw lives
+        // Kubernetes namespace
         K8S_NAMESPACE = "collabdraw"
 
-        // Production URLs baked into the Next.js frontend image
-        // Change these to your actual domain or ALB DNS name
-        NEXT_PUBLIC_API_URL    = "https://your-domain.com/api"
-        NEXT_PUBLIC_SOCKET_URL = "wss://your-domain.com/ws"
-        NEXT_PUBLIC_SITE_URL   = "https://your-domain.com"
+        // EKS cluster name
+        EKS_CLUSTER = "collabdraw-cluster"
+
+        // ALB DNS — the public URL of the live application
+        // This is baked into the Next.js frontend bundle at build time
+        ALB_DNS = "k8s-collabdr-collabdr-0c35dcb652-657159459.ap-south-1.elb.amazonaws.com"
+
+        // NEXT_PUBLIC_* variables are compiled into the JS bundle at build time.
+        // The browser needs these URLs before the page loads.
+        // They CANNOT be changed at runtime — must be set here.
+        NEXT_PUBLIC_API_URL    = "http://${ALB_DNS}/api"
+        NEXT_PUBLIC_SOCKET_URL = "ws://${ALB_DNS}/ws"
+        NEXT_PUBLIC_SITE_URL   = "http://${ALB_DNS}"
     }
 
     stages {
 
         // ── Stage 1: Checkout ───────────────────────────────
         // Pull the latest code from GitHub.
-        // Jenkins does this automatically when triggered by a push,
-        // but we make it explicit here for clarity.
+        // Jenkins triggers this automatically via GitHub webhook on push.
         stage('Checkout') {
             steps {
-                echo "Checking out source code..."
+                echo "=== Stage 1: Checkout ==="
                 checkout scm
+                echo "Branch: ${env.BRANCH_NAME}"
+                echo "Commit: ${env.GIT_COMMIT}"
+                echo "Image tag: ${IMAGE_TAG}"
             }
         }
 
         // ── Stage 2: Build Docker Images ────────────────────
-        // Build all three service images from the repo root.
-        // The build context must be "." (repo root) because the
-        // Dockerfiles reference files across the monorepo.
+        // Build all three service images from the monorepo root.
+        // Build context MUST be "." (repo root) — Dockerfiles reference
+        // files across packages/ and apps/ directories.
         stage('Build Docker Images') {
             steps {
-                echo "Building Docker images..."
+                echo "=== Stage 2: Build Docker Images ==="
+
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    // Login to ECR before building (needed to pull base images if cached)
+                    sh """
+                        aws ecr get-login-password --region ${AWS_REGION} | \
+                        docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                    """
+                }
 
                 // Build HTTP backend
+                // Two tags: commit hash (for rollback) + latest (for convenience)
                 sh """
                     docker build \
                         -f apps/http-backend/Dockerfile \
@@ -76,6 +104,7 @@ pipeline {
                         -t ${IMAGE_HTTP}:latest \
                         .
                 """
+                echo "✅ http-backend built: ${IMAGE_HTTP}:${IMAGE_TAG}"
 
                 // Build WebSocket server
                 sh """
@@ -85,10 +114,12 @@ pipeline {
                         -t ${IMAGE_WS}:latest \
                         .
                 """
+                echo "✅ ws-server built: ${IMAGE_WS}:${IMAGE_TAG}"
 
                 // Build Next.js frontend
-                // NEXT_PUBLIC_* must be passed as build args — they get
-                // baked into the JavaScript bundle at build time
+                // NEXT_PUBLIC_* MUST be passed as --build-arg here.
+                // These URLs get compiled into the JavaScript bundle.
+                // If you change the ALB DNS, you must rebuild this image.
                 sh """
                     docker build \
                         -f apps/web/Dockerfile \
@@ -99,105 +130,146 @@ pipeline {
                         -t ${IMAGE_WEB}:latest \
                         .
                 """
-
+                echo "✅ frontend built: ${IMAGE_WEB}:${IMAGE_TAG}"
                 echo "All images built successfully."
             }
         }
 
-        // ── Stage 3: Push to Docker Hub ─────────────────────
-        // Log in to Docker Hub and push all three images.
-        // "dockerhub-creds" is a Jenkins credential you create
-        // in: Manage Jenkins → Credentials → Add Credentials
-        // Type: Username with password
-        stage('Push Images') {
+        // ── Stage 3: Push to ECR ────────────────────────────
+        // Push all three images to AWS Elastic Container Registry.
+        // ECR is a private Docker registry inside your AWS account.
+        // EKS pulls images from ECR without extra authentication
+        // because both are in the same AWS account.
+        stage('Push to ECR') {
             steps {
-                echo "Pushing images to Docker Hub..."
+                echo "=== Stage 3: Push to ECR ==="
 
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USERNAME',
-                    passwordVariable: 'DOCKER_PASSWORD'
-                )]) {
-                    sh "echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin"
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    // Authenticate Docker with ECR
+                    sh """
+                        aws ecr get-login-password --region ${AWS_REGION} | \
+                        docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                    """
 
-                    // Push both the commit-tagged and latest versions
+                    // Push http-backend (both commit tag and latest)
                     sh "docker push ${IMAGE_HTTP}:${IMAGE_TAG}"
                     sh "docker push ${IMAGE_HTTP}:latest"
+                    echo "✅ Pushed: ${IMAGE_HTTP}:${IMAGE_TAG}"
 
+                    // Push ws-server
                     sh "docker push ${IMAGE_WS}:${IMAGE_TAG}"
                     sh "docker push ${IMAGE_WS}:latest"
+                    echo "✅ Pushed: ${IMAGE_WS}:${IMAGE_TAG}"
 
+                    // Push frontend
                     sh "docker push ${IMAGE_WEB}:${IMAGE_TAG}"
                     sh "docker push ${IMAGE_WEB}:latest"
+                    echo "✅ Pushed: ${IMAGE_WEB}:${IMAGE_TAG}"
                 }
 
-                echo "All images pushed successfully."
+                echo "All images pushed to ECR successfully."
             }
         }
 
-        // ── Stage 4: Deploy to Kubernetes ───────────────────
+        // ── Stage 4: Deploy to EKS ──────────────────────────
         // Update the running containers in EKS with the new images.
-        // "kubectl set image" tells Kubernetes to pull the new image
-        // and do a rolling update — zero downtime deployment.
         //
-        // "kubeconfig" is a Jenkins credential (Secret file type)
-        // containing your ~/.kube/config content.
-        stage('Deploy to Kubernetes') {
+        // HOW ROLLING UPDATE WORKS:
+        //   kubectl set image → Kubernetes starts new pods with new image
+        //   New pod passes readiness probe → old pod terminated
+        //   Repeat for each replica → zero downtime
+        //
+        // "kubeconfig" is a Jenkins Secret File credential containing
+        // the contents of ~/.kube/config (with EKS cluster context).
+        stage('Deploy to EKS') {
             steps {
-                echo "Deploying to Kubernetes..."
+                echo "=== Stage 4: Deploy to EKS ==="
+                echo "Deploying tag: ${IMAGE_TAG} to cluster: ${EKS_CLUSTER}"
 
                 withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
 
-                    // Update each deployment with the new image tag
+                    // Update http-backend deployment with new image
                     sh """
                         kubectl set image deployment/http-backend \
                             http-backend=${IMAGE_HTTP}:${IMAGE_TAG} \
                             -n ${K8S_NAMESPACE} \
-                            --kubeconfig=${KUBECONFIG}
+                            --kubeconfig=\${KUBECONFIG}
                     """
 
+                    // Update ws-server deployment
                     sh """
                         kubectl set image deployment/ws-server \
                             ws-server=${IMAGE_WS}:${IMAGE_TAG} \
                             -n ${K8S_NAMESPACE} \
-                            --kubeconfig=${KUBECONFIG}
+                            --kubeconfig=\${KUBECONFIG}
                     """
 
+                    // Update frontend deployment
                     sh """
                         kubectl set image deployment/frontend \
                             frontend=${IMAGE_WEB}:${IMAGE_TAG} \
                             -n ${K8S_NAMESPACE} \
-                            --kubeconfig=${KUBECONFIG}
+                            --kubeconfig=\${KUBECONFIG}
                     """
 
-                    // Wait for the rollout to finish before marking success
+                    // Wait for all rollouts to complete before marking success.
+                    // If any rollout fails (pod crashes, readiness probe fails),
+                    // this step fails and Jenkins marks the build as failed.
                     sh """
                         kubectl rollout status deployment/http-backend \
-                            -n ${K8S_NAMESPACE} --kubeconfig=${KUBECONFIG}
+                            -n ${K8S_NAMESPACE} --kubeconfig=\${KUBECONFIG} --timeout=120s
+                    """
+                    sh """
                         kubectl rollout status deployment/ws-server \
-                            -n ${K8S_NAMESPACE} --kubeconfig=${KUBECONFIG}
+                            -n ${K8S_NAMESPACE} --kubeconfig=\${KUBECONFIG} --timeout=120s
+                    """
+                    sh """
                         kubectl rollout status deployment/frontend \
-                            -n ${K8S_NAMESPACE} --kubeconfig=${KUBECONFIG}
+                            -n ${K8S_NAMESPACE} --kubeconfig=\${KUBECONFIG} --timeout=120s
+                    """
+
+                    // Print final pod status for the build log
+                    sh """
+                        kubectl get pods -n ${K8S_NAMESPACE} --kubeconfig=\${KUBECONFIG}
                     """
                 }
 
-                echo "Deployment complete."
+                echo "Deployment complete. Live at: http://${ALB_DNS}"
             }
         }
     }
 
     // ── Post-pipeline actions ───────────────────────────────
-    // These run after all stages, regardless of success or failure.
+    // Run after all stages regardless of success or failure.
     post {
         success {
-            echo "Pipeline succeeded. CollabDraw is live with tag: ${IMAGE_TAG}"
+            echo """
+            ✅ Pipeline SUCCEEDED
+            ─────────────────────────────────────
+            Image tag:  ${IMAGE_TAG}
+            Cluster:    ${EKS_CLUSTER}
+            Namespace:  ${K8S_NAMESPACE}
+            Live URL:   http://${ALB_DNS}
+            ─────────────────────────────────────
+            """
         }
         failure {
-            echo "Pipeline failed. Check the logs above for errors."
+            echo """
+            ❌ Pipeline FAILED
+            Check the stage logs above for the error.
+            To rollback to previous version:
+              kubectl rollout undo deployment/http-backend -n ${K8S_NAMESPACE}
+              kubectl rollout undo deployment/ws-server -n ${K8S_NAMESPACE}
+              kubectl rollout undo deployment/frontend -n ${K8S_NAMESPACE}
+            """
         }
         always {
-            // Clean up Docker login credentials from the agent
-            sh "docker logout || true"
+            // Always log out of Docker to clean up credentials on the agent
+            sh "docker logout ${ECR_REGISTRY} || true"
         }
     }
 }

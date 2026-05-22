@@ -273,7 +273,7 @@ Both probes call `GET /health` on the backend services, which returns `200 OK` w
 kind: PersistentVolumeClaim
 spec:
   resources:
-    requests:
+    requests: 
       storage: 1Gi
 ```
 
@@ -289,6 +289,9 @@ const rooms = new Map<string, Set<User>>()
 
 With 2 replicas, User A might connect to Pod 1 and User B to Pod 2. They'd be in separate memory spaces and wouldn't see each other's drawings. **1 replica is correct for now.** The future fix is Redis Pub/Sub — all pods share state through Redis.
 
+
+
+--to get rid of sticky conenctiions too ans use redis pub sub( 1 guy in connectedd to us server wanna talk to the guyi conencted in the indian server)
 ---
 
 ## 6. Kubernetes — Traffic Flow
@@ -457,7 +460,7 @@ eksctl create iamserviceaccount \
   --name aws-load-balancer-controller \
   --attach-policy-arn arn:aws:iam::aws:policy/AWSLoadBalancerControllerIAMPolicy \
   --approve
-
+  
 # Install the controller using Helm
 helm repo add eks https://aws.github.io/eks-charts
 helm repo update
@@ -1243,7 +1246,7 @@ Terraform:  creates VPC + EKS + ECR in AWS automatically
 
 ```
 terraform/
-├── provider.tf          ← "use AWS in us-east-1"
+├── provider.tf          ← "use AWS in ap-south-1"
 ├── variables.tf         ← configurable settings (region, instance type)
 ├── vpc.tf               ← network: VPC, subnets, internet gateway
 ├── eks.tf               ← EKS cluster + worker nodes + ALB IAM role
