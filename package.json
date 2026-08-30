@@ -15,14 +15,22 @@
     "db:generate": "pnpm --filter db run generate",
     "db:migrate": "pnpm --filter db run migrate",
     "db:migrate:dev": "pnpm --filter db run migrate:dev",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "test": "turbo run test",
+    "test:api": "pnpm --filter http-backend test",
+    "test:ws": "pnpm --filter ws-server test",
+    "test:e2e": "pnpm --filter web test:e2e",
+    "test:coverage": "turbo run test:coverage",
+    "test:ci": "turbo run test:ci"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.1",
     "prettier": "^3.6.2",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "turbo": "^2.5.8",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "ws": "^8.18.3"
   },
   "packageManager": "pnpm@9.0.0",
   "engines": {

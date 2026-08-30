@@ -6,10 +6,19 @@
   "scripts": {
     "dev": "ts-node-dev src/index.ts",
     "build": "tsc",
-    "start": "cd /app && pnpm db:migrate && node apps/http-backend/dist/index.js"
+    "start": "cd /app && pnpm db:migrate && node apps/http-backend/dist/index.js",
+    "test": "jest --runInBand",
+    "test:coverage": "jest --runInBand --coverage",
+    "test:ci": "jest --runInBand --ci --coverage --reporters=default --reporters=jest-junit"
   },
   "devDependencies": {
-    "@repo/typescript-config": "workspace:*"
+    "@repo/typescript-config": "workspace:*",
+    "@types/jest": "^30.0.0",
+    "@types/supertest": "^7.2.1",
+    "jest": "^30.5.0",
+    "jest-mock-extended": "^4.0.1",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.12"
   },
   "keywords": [],
   "author": "",
