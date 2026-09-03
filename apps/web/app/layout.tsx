@@ -9,8 +9,12 @@ import {
 } from "@/components/providers/ContextProvider";
 
 export const metadata: Metadata = {
-  title: "Excalidraw Clone",
-  description: "Excalidraw on steroids",
+  title: {
+    default: "CollabDraw - Collaborative whiteboards that feel alive",
+    template: "%s | CollabDraw",
+  },
+  description:
+    "A real-time collaborative canvas for teams that think visually.",
 };
 
 export default async function RootLayout({

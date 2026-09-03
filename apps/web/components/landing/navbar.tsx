@@ -2,42 +2,39 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Github, PaintBucket } from "lucide-react";
+import { ArrowUpRight, Github, Paintbrush } from "lucide-react";
 import DarkMode from "../DarkMode";
 
 export function Navbar() {
   return (
-    <header className='sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60'>
-      <div className='mx-auto max-w-6xl px-4'>
-        <div className='flex h-14 items-center justify-between'>
+    <header className='sticky top-0 z-50 w-full border-b border-white/10 bg-background/75 backdrop-blur-xl supports-[backdrop-filter]:bg-background/55'>
+      <div className='mx-auto max-w-7xl px-5'>
+        <div className='flex h-16 items-center justify-between'>
           <Link
             href='/'
             className='group inline-flex items-center gap-2'
             aria-label='CollabDraw Home'>
-            <PaintBucket className='size-5 text-primary' />
-            <span className='font-medium tracking-tight'>CollabDraw</span>
+            <span className='grid size-8 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm'>
+              <Paintbrush className='size-4' />
+            </span>
+            <span className='font-semibold tracking-tight'>collabdraw</span>
           </Link>
 
           <nav className='hidden items-center gap-6 md:flex'>
             <Link
-              className='text-sm text-muted-foreground hover:text-foreground transition-colors'
+              className='text-sm font-medium text-muted-foreground transition-colors hover:text-foreground'
               href='#features'>
               Features
             </Link>
             <Link
-              className='text-sm text-muted-foreground hover:text-foreground transition-colors'
+              className='text-sm font-medium text-muted-foreground transition-colors hover:text-foreground'
               href='#demo'>
               Demo
             </Link>
             <Link
-              className='text-sm text-muted-foreground hover:text-foreground transition-colors'
-              href='#testimonials'>
-              Love
-            </Link>
-            <Link
-              className='text-sm text-muted-foreground hover:text-foreground transition-colors'
-              href='#pricing'>
-              Pricing
+              className='text-sm font-medium text-muted-foreground transition-colors hover:text-foreground'
+              href='#how-it-works'>
+              How it works
             </Link>
           </nav>
 
@@ -45,8 +42,8 @@ export function Navbar() {
             <Button asChild variant='ghost' className='hidden sm:inline-flex'>
               <Link href='/login'>Log in</Link>
             </Button>
-            <Button asChild>
-              <Link href='/signup'>Sign up</Link>
+            <Button asChild className='rounded-full px-4'>
+              <Link href='/signup'>Start a board <ArrowUpRight className='size-4' /></Link>
             </Button>
             <Button
               asChild
