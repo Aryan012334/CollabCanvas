@@ -366,10 +366,7 @@ This project is licensed under the MIT License.
 ---
 
 ## Author
-
-**Rohit Kumar**
-
-- GitHub: [@rohitdev_sol](https://github.com/rohitdev_sol)
+Aryan Yewale
 
 ---
 
