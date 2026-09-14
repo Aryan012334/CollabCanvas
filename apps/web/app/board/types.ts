@@ -10,10 +10,25 @@ import {
     Type,
 } from "lucide-react";
 
-import { ShapeType } from "@repo/db/client";
+// ─── Local ShapeType enum ─────────────────────────────────────────────────────
+// Defined here as plain strings instead of importing from @repo/db/client.
+// Importing Prisma's generated client into the Next.js frontend bundle pulls in
+// the native query engine .node binary which is not copied into the standalone
+// output — causing a fatal "engine not found" crash at runtime.
+// These values must exactly match the ShapeType enum in packages/db/prisma/schema.prisma.
+export const ShapeType = {
+    RECTANGLE: "RECTANGLE",
+    CIRCLE:    "CIRCLE",
+    LINE:      "LINE",
+    DIAMOND:   "DIAMOND",
+    ARROW:     "ARROW",
+    TEXT:      "TEXT",
+} as const;
+
+export type ShapeType = typeof ShapeType[keyof typeof ShapeType];
 
 export interface Shape {
-    id: number,
+    id: number;
     startX: number;
     startY: number;
     width: number;
@@ -34,62 +49,46 @@ export interface ZoomContext {
     getPanOffset: () => { x: number; y: number };
 }
 
-
-
 export type ToolType = "hand" | "select" | "rect" | "diamond" | "circle" | "arrow" | "line" | "eraser" | "text";
 
-
-
-//make tooltype to enum converter 
-export function getToolTypeFromString(toolType: string): ShapeType {
+export function getToolTypeFromString(toolType: string): string {
     switch (toolType) {
-        case "rect":
-            return ShapeType.RECTANGLE;
-        case "circle":
-            return ShapeType.CIRCLE;
-        case "line":
-            return ShapeType.LINE;
-        case "diamond":
-            return ShapeType.DIAMOND;
-        case "arrow":
-            return ShapeType.ARROW;
-        case "text":
-            return ShapeType.TEXT;
-        default:
-            return ShapeType.RECTANGLE;
+        case "rect":    return ShapeType.RECTANGLE;
+        case "circle":  return ShapeType.CIRCLE;
+        case "line":    return ShapeType.LINE;
+        case "diamond": return ShapeType.DIAMOND;
+        case "arrow":   return ShapeType.ARROW;
+        case "text":    return ShapeType.TEXT;
+        default:        return ShapeType.RECTANGLE;
     }
 }
 
 export const tools = [
-    { id: "hand", icon: Hand, label: "Hand" },
-    { id: "select", icon: MousePointer2, label: "Select" },
-    { id: "rect", icon: RectangleHorizontal, label: "Rectangle" },
-    { id: "diamond", icon: Diamond, label: "Diamond" },
-    { id: "circle", icon: Circle, label: "Circle" },
-    { id: "arrow", icon: MoveRight, label: "Arrow" },
-    { id: "line", icon: Minus, label: "Line" },
-    // { id: "pencil", icon: PencilLine, label: "Pencil" },
-    { id: "text", icon: Type, label: "Text" },
-    { id: "eraser", icon: Eraser, label: "Eraser" },
+    { id: "hand",    icon: Hand,                label: "Hand"      },
+    { id: "select",  icon: MousePointer2,        label: "Select"    },
+    { id: "rect",    icon: RectangleHorizontal,  label: "Rectangle" },
+    { id: "diamond", icon: Diamond,              label: "Diamond"   },
+    { id: "circle",  icon: Circle,               label: "Circle"    },
+    { id: "arrow",   icon: MoveRight,            label: "Arrow"     },
+    { id: "line",    icon: Minus,                label: "Line"      },
+    { id: "text",    icon: Type,                 label: "Text"      },
+    { id: "eraser",  icon: Eraser,               label: "Eraser"    },
 ];
 
-
-
-
 export const pastelColors = [
-    { name: "Default", value: "#f5f5f5", class: "bg-gray-100" },
-    { name: "Peach", value: "#ffedd5", class: "bg-orange-100" },
-    { name: "Mint", value: "#dcfce7", class: "bg-green-100" },
-    { name: "Lavender", value: "#ede9fe", class: "bg-violet-100" },
-    { name: "Sky", value: "#e0f2fe", class: "bg-sky-100" },
-    { name: "Cream", value: "#fef9c3", class: "bg-yellow-100" },
-    { name: "Rose", value: "#ffe4e6", class: "bg-rose-100" },
-    { name: "Azure", value: "#cffafe", class: "bg-cyan-100" },
-    { name: "Lilac", value: "#f3e8ff", class: "bg-purple-100" },
-    { name: "Moss", value: "#f0fdf4", class: "bg-lime-100" },
-    { name: "Charcoal", value: "#1e1e1e", class: "bg-neutral-900" },
+    { name: "Default",      value: "#f5f5f5", class: "bg-gray-100"     },
+    { name: "Peach",        value: "#ffedd5", class: "bg-orange-100"   },
+    { name: "Mint",         value: "#dcfce7", class: "bg-green-100"    },
+    { name: "Lavender",     value: "#ede9fe", class: "bg-violet-100"   },
+    { name: "Sky",          value: "#e0f2fe", class: "bg-sky-100"      },
+    { name: "Cream",        value: "#fef9c3", class: "bg-yellow-100"   },
+    { name: "Rose",         value: "#ffe4e6", class: "bg-rose-100"     },
+    { name: "Azure",        value: "#cffafe", class: "bg-cyan-100"     },
+    { name: "Lilac",        value: "#f3e8ff", class: "bg-purple-100"   },
+    { name: "Moss",         value: "#f0fdf4", class: "bg-lime-100"     },
+    { name: "Charcoal",     value: "#1e1e1e", class: "bg-neutral-900"  },
     { name: "Light Charcoal", value: "#525252", class: "bg-neutral-600" },
-    { name: "Deep Teal", value: "#0f3d3e", class: "bg-teal-900" },
-    { name: "Midnight Blue", value: "#1e3a5f", class: "bg-blue-900" },
-    { name: "Moss Green", value: "#1b3a2e", class: "bg-emerald-900" },
+    { name: "Deep Teal",    value: "#0f3d3e", class: "bg-teal-900"     },
+    { name: "Midnight Blue", value: "#1e3a5f", class: "bg-blue-900"   },
+    { name: "Moss Green",   value: "#1b3a2e", class: "bg-emerald-900"  },
 ];
