@@ -6,6 +6,7 @@ module.exports = {
   testMatch: ["**/__tests__/**/*.test.ts"],
   moduleNameMapper: {
     "^@repo/backend-common/(.*)$": "<rootDir>/../../packages/backend-common/src/$1",
+    "^@repo/db/client$": "<rootDir>/../../packages/db/src/index.ts",
     "^@repo/db/(.*)$": "<rootDir>/../../packages/db/src/$1",
   },
   clearMocks: true,

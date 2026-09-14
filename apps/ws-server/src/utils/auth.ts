@@ -54,6 +54,12 @@ export type Job =
             width?: number;
             height?: number;
         };
+    }
+    | {
+        type: "shape:delete";
+        roomId: number | string;
+        userId: string;
+        payload: { id: number };
     };
 
 export function verifyToken(token: string): JwtPayload | null {

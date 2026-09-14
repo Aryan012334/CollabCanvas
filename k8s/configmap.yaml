@@ -28,3 +28,8 @@ data:
   NEXT_PUBLIC_API_URL: "https://your-domain.com/api"
   NEXT_PUBLIC_SOCKET_URL: "wss://your-domain.com/ws"
   NEXT_PUBLIC_SITE_URL: "https://your-domain.com"
+
+  # Redis URL for WebSocket Pub/Sub fan-out.
+  # "redis" resolves to the Redis Service within the collabdraw namespace.
+  # With this set, ws-server can safely run multiple replicas.
+  REDIS_URL: "redis://redis:6379"

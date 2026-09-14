@@ -7,6 +7,9 @@ import cron from "node-cron";
 import { verifyToken } from "./utils/auth";
 import { addUser, removeUser } from "./state";
 import { handleEvent } from "./events/handlers";
+import { isRedisReady, startRedisFanout } from "./redis";
+import { metricsRegistry } from "./metrics";
+import { broadcastRedisEvent } from "./events/handlers";
 
 import { prismaClient as prisma } from "@repo/db/client";
 
@@ -27,10 +30,25 @@ app.get("/health", async (_, res) => {
   } catch (err) {
     console.error("WS health failed:", err);
 
-  res.status(500).json({`!Az`
-      status: "error",
-    });
+    res.status(500).json({ status: "error" });
   }
+});
+
+app.get("/ready", async (_, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    if (process.env.REDIS_URL && !isRedisReady()) {
+      return res.status(503).json({ status: "degraded", redis: "unavailable" });
+    }
+    res.json({ status: "ready" });
+  } catch {
+    res.status(503).json({ status: "unavailable" });
+  }
+});
+
+app.get("/metrics", async (_, res) => {
+  res.set("Content-Type", metricsRegistry.contentType);
+  res.end(await metricsRegistry.metrics());
 });
 
 // HTTP server
@@ -89,6 +107,7 @@ const PORT = Number(process.env.PORT) || 4000;
 server.listen(PORT, () => {
   console.log(`🚀 WS server running on port ${PORT}`);
 
+  void startRedisFanout(broadcastRedisEvent);
   startCron();
 });
 

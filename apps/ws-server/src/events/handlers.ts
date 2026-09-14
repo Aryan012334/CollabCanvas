@@ -3,6 +3,8 @@ import { prismaClient as prisma } from "@repo/db/client";
 import WebSocket from "ws";
 import { ShapeType } from "@repo/db/client";
 import { Job } from "../utils/auth";
+import { publishRoomEvent } from "../redis";
+import { webSocketEvents } from "../metrics";
 
 const queue: {
   job: Job;
@@ -179,6 +181,14 @@ export async function handleEvent(user: User, data: any) {
         userId: user.userId,
         payload: { message: data.message },
       });
+      await publishRoomEvent({
+        type: "chat",
+        message: data.message,
+        roomId,
+        userId: user.userId,
+        username: user.name,
+      });
+      webSocketEvents.inc({ type: "chat", source: "client" });
       break;
     }
 
@@ -208,6 +218,14 @@ export async function handleEvent(user: User, data: any) {
           }
         });
       }
+      await publishRoomEvent({
+        type: "shape:create",
+        shape: { ...data.shape, id: createdShape.id },
+        roomId,
+        userId: user.userId,
+        username: user.name,
+      });
+      webSocketEvents.inc({ type: "shape:create", source: "client" });
       break;
     }
 
@@ -236,6 +254,91 @@ export async function handleEvent(user: User, data: any) {
           ),
         );
       }
+      await publishRoomEvent({
+        type: "shape:update",
+        shape: { ...data.shape, id: updatedShape.id },
+        roomId,
+        userId: user.userId,
+        username: user.name,
+      });
+      webSocketEvents.inc({ type: "shape:update", source: "client" });
+      break;
+    }
+
+    case "shape:delete": {
+      const shapeId = Number(data.shapeId);
+      if (isNaN(shapeId)) {
+        user.ws.send(JSON.stringify({ type: "error", message: "Invalid shapeId for shape:delete" }));
+        break;
+      }
+
+      try {
+        await prisma.shape.delete({ where: { id: shapeId } });
+      } catch (err) {
+        console.warn("shape:delete — shape not found in DB, broadcasting anyway:", shapeId);
+      }
+
+      const room = rooms.get(roomId);
+      if (room) {
+        room.forEach((u) => {
+          if (u.ws.readyState === WebSocket.OPEN) {
+            u.ws.send(JSON.stringify({
+              type: "shape:delete",
+              shapeId,
+              roomId,
+              userId: user.userId,
+            }));
+          }
+        });
+      }
+      await publishRoomEvent({ type: "shape:delete", shapeId, roomId, userId: user.userId });
+      webSocketEvents.inc({ type: "shape:delete", source: "client" });
+      break;
+    }
+
+    case "canvas:clear": {
+      // Delete all shapes in the room from DB
+      try {
+        await prisma.shape.deleteMany({ where: { roomId: Number(roomId) } });
+      } catch (err) {
+        console.error("canvas:clear DB delete failed:", err);
+      }
+
+      const room = rooms.get(roomId);
+      if (room) {
+        room.forEach((u) => {
+          if (u.ws.readyState === WebSocket.OPEN) {
+            u.ws.send(JSON.stringify({
+              type: "canvas:clear",
+              roomId,
+              userId: user.userId,
+            }));
+          }
+        });
+      }
+      await publishRoomEvent({ type: "canvas:clear", roomId, userId: user.userId });
+      webSocketEvents.inc({ type: "canvas:clear", source: "client" });
+      break;
+    }
+
+    case "cursor:move": {
+      // Broadcast cursor position to all OTHER users in the room — no DB write needed
+      const room = rooms.get(roomId);
+      if (room) {
+        room.forEach((u) => {
+          if (u.ws !== user.ws && u.ws.readyState === WebSocket.OPEN) {
+            u.ws.send(JSON.stringify({
+              type: "cursor:move",
+              userId: user.userId,
+              name: user.name,
+              x: data.x,
+              y: data.y,
+              roomId,
+            }));
+          }
+        });
+      }
+      // Do NOT publish cursor moves to Redis — they're ephemeral and high-frequency
       break;
     }
 
@@ -244,4 +347,18 @@ export async function handleEvent(user: User, data: any) {
         JSON.stringify({ type: "error", message: "Unknown event type" }),
       );
   }
+}
+
+/** Broadcasts a validated event received from another WebSocket pod via Redis. */
+export function broadcastRedisEvent(data: Record<string, unknown>) {
+  const roomId = String(data.roomId ?? "");
+  const room = rooms.get(roomId);
+  if (!room) return;
+
+  room.forEach((user) => {
+    if (user.ws.readyState === WebSocket.OPEN) {
+      user.ws.send(JSON.stringify(data));
+    }
+  });
+  webSocketEvents.inc({ type: String(data.type ?? "unknown"), source: "redis" });
 }

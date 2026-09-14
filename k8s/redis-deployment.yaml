@@ -1,0 +1,60 @@
+# ============================================================
+# redis-deployment.yaml
+#
+# WHY: Redis powers the WebSocket Pub/Sub fan-out layer.
+# When the ws-server runs multiple replicas, each pod keeps
+# its own in-memory room Map. Without Redis, User A on pod-1
+# and User B on pod-2 can't see each other's drawing events.
+#
+# With Redis, every ws-server pod:
+#   1. Subscribes to the "collabdraw:rooms" channel
+#   2. On receiving a local WS event, publishes it to Redis
+#   3. All OTHER pods receive the Redis message and forward
+#      it to their locally connected WebSocket clients
+#
+# This enables horizontal scaling of the ws-server to N replicas.
+#
+# NOTE: This is a single-node Redis without persistence.
+# For production HA, use AWS ElastiCache (Redis) instead.
+# ============================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: collabdraw
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          args: ["--save", "", "--appendonly", "no"]   # disable persistence for speed
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 15

@@ -1,0 +1,22 @@
+# ============================================================
+# redis-service.yaml
+#
+# ClusterIP service — Redis is internal only.
+# ws-server pods reach it at redis:6379 via Kubernetes DNS.
+# ============================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: collabdraw
+  labels:
+    app: redis
+spec:
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+  type: ClusterIP

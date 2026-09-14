@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { activeWebSocketConnections } from "./metrics";
 
 export interface User {
     userId: string;
@@ -11,6 +12,7 @@ export const rooms = new Map<string, Set<User>>();
 
 export function addUser(user: User) {
     users.set(user.userId, user);
+    activeWebSocketConnections.set(users.size);
 }
 
 export function removeUser(userId: string) {
@@ -44,6 +46,7 @@ export function removeUser(userId: string) {
     }
 
     users.delete(userId);
+    activeWebSocketConnections.set(users.size);
     console.log(`User ${user.name} (${userId}) completely removed`);
 }
 

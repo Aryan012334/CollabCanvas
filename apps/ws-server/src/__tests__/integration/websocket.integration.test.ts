@@ -83,11 +83,31 @@ function makeToken(userId: string, name: string = "Test User") {
 function connectClient(port: number, token: string): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://localhost:${port}?token=${token}`);
-    ws.on("open", () => resolve(ws));
-    ws.on("error", reject);
-    // Reject if connection is closed before open (auth failure)
+    let settled = false;
+    let opened = false;
+
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+
+    ws.on("open", () => {
+      opened = true;
+      // A WebSocket upgrade can succeed before the server immediately closes
+      // an invalid token. Wait one event-loop turn before declaring success.
+      setTimeout(() => {
+        if (!settled && ws.readyState === WebSocket.OPEN) {
+          settled = true;
+          resolve(ws);
+        }
+      }, 20);
+    });
+    ws.on("error", (error) => fail(error));
     ws.on("close", (code) => {
-      if (code !== 1000) reject(new Error(`Closed with code ${code}`));
+      if (!settled && (!opened || code !== 1000)) {
+        fail(new Error(`Closed with code ${code}`));
+      }
     });
   });
 }

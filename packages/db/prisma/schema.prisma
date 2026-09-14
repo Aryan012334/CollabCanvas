@@ -45,7 +45,7 @@ model RoomParticipant {
   updatedAt   DateTime   @updatedAt
   deletedAt   DateTime?  
 
-  room        Room       @relation(fields: [roomId], references: [id])
+  room        Room       @relation(fields: [roomId], references: [id], onDelete: Cascade)
   user        User       @relation(fields: [userId], references: [id])
 
   @@unique([roomId, userId])
@@ -60,7 +60,7 @@ model Chat {
   updatedAt   DateTime   @updatedAt
   deletedAt   DateTime?  
 
-  room        Room       @relation(fields: [roomId], references: [id])
+  room        Room       @relation(fields: [roomId], references: [id], onDelete: Cascade)
   user        User       @relation(fields: [userId], references: [id])
 
   @@index([roomId])
@@ -92,7 +92,7 @@ model Shape {
   fontSize     Int?
   text         String?
 
-  room         Room      @relation(fields: [roomId], references: [id])
+  room         Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
   user         User      @relation(fields: [userId], references: [id])
 
   @@index([roomId])

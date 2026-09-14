@@ -24,6 +24,9 @@ networks:
 volumes:
   # Named volume so Postgres data survives container restarts.
   postgres_data:
+  # Named volume so Redis data survives restarts (optional — Redis is used
+  # only for WS pub/sub fan-out; data loss on restart is acceptable).
+  redis_data:
 
 services:
 
@@ -52,7 +55,29 @@ services:
       timeout: 5s
       retries: 10
 
-  # ── 2. HTTP Backend ────────────────────────────────────────
+  # ── 2. Redis ────────────────────────────────────────────────
+  # Used by the WebSocket server for Pub/Sub fan-out across
+  # multiple ws-server replicas. Without this, users on
+  # different pods can't see each other's drawing events.
+  # The ws-server degrades gracefully (single-pod only) if
+  # REDIS_URL is not set, but for production it must be present.
+  redis:
+    image: redis:7-alpine
+    container_name: collab-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - collab-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── 3. HTTP Backend ────────────────────────────────────────
   # Express REST API. Handles auth, rooms, shapes.
   # Runs DB migrations on startup before the server starts.
   http-backend:
@@ -79,9 +104,11 @@ services:
       postgres:
         condition: service_healthy   # wait for Postgres healthcheck to pass
 
-  # ── 3. WebSocket Server ────────────────────────────────────
+  # ── 4. WebSocket Server ────────────────────────────────────
   # Handles real-time drawing sync between users.
   # Clients connect via ws://localhost:4000?token=<jwt>
+  # Now includes REDIS_URL so multiple replicas can fan-out
+  # drawing events to all connected users via Redis Pub/Sub.
   ws-server:
     build:
       context: .
@@ -95,13 +122,18 @@ services:
       JWT_SECRET: ${JWT_SECRET:-supersecretchangeme}
       NODE_ENV: production
       PORT: 4000
+      # Redis URL for WebSocket Pub/Sub fan-out.
+      # "redis" is the service name above — Docker resolves it.
+      REDIS_URL: redis://redis:6379
     networks:
       - collab-net
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
-  # ── 4. Next.js Frontend ────────────────────────────────────
+  # ── 5. Next.js Frontend ────────────────────────────────────
   # The browser app. Built with NEXT_PUBLIC_* URLs baked in.
   # These tell the browser where to find the API and WebSocket.
   web:

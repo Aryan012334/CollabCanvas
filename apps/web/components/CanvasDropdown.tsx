@@ -24,7 +24,7 @@ export const CanvasDropdown = () => {
         className='flex items-center gap-2 focus:bg-accent cursor-pointer focus:text-accent-foreground'
         asChild>
         <a
-          href='https://github.com/yourusername'
+          href='https://github.com/Aryan012334/CollabCanvas'
           target='_blank'
           rel='noopener noreferrer'>
           <Github className='w-4 h-4' />
@@ -36,7 +36,7 @@ export const CanvasDropdown = () => {
         className='flex items-center gap-2 focus:bg-accent cursor-pointer focus:text-accent-foreground'
         asChild>
         <a
-          href='https://twitter.com/yourusername'
+          href='https://twitter.com/aryanyewale'
           target='_blank'
           rel='noopener noreferrer'>
           <Twitter className='w-4 h-4' />
@@ -48,7 +48,7 @@ export const CanvasDropdown = () => {
         className='flex items-center gap-2 focus:bg-accent cursor-pointer focus:text-accent-foreground'
         asChild>
         <a
-          href='https://instagram.com/yourusername'
+          href='https://instagram.com/aryanyewale'
           target='_blank'
           rel='noopener noreferrer'>
           <Instagram className='w-4 h-4' />

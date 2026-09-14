@@ -106,7 +106,9 @@ app.post("/login", async (req, res) => {
       return;
     }
 
-    const token = jwt.sign({ userId: user.id, name: user.name }, JWT_SECRET);
+    const token = jwt.sign({ userId: user.id, name: user.name }, JWT_SECRET, {
+      expiresIn: "30d",
+    });
     res
       .cookie("token", token, {
         maxAge: 60 * 60 * 24 * 30, // 30 days
@@ -201,37 +203,83 @@ app.delete("/room/:roomId", authMiddleware, async (req, res) => {
     const roomId = Number(req.params.roomId);
     const userId = (req as RequestWithUserId).userId;
     if (isNaN(roomId)) {
-      return res.status(400).json({
-        message: "Invalid room ID",
-      });
+      return res.status(400).json({ message: "Invalid room ID" });
     }
-    // const room = await prisma.room.findUnique({
-    //     where: {
-    //         id: roomId
-    //     }
-    // })
 
-    // if (!room) {
-    //     return res.status(404).json({
-    //         message: "Room not found"
-    //     })
-    // }
+    // Verify ownership before deleting
+    const room = await prisma.room.findUnique({ where: { id: roomId } });
+    if (!room) {
+      return res.status(404).json({ message: "Room not found" });
+    }
+    if (room.adminId !== userId) {
+      return res.status(403).json({ message: "Only the room owner can delete this room" });
+    }
 
-    await prisma.room.delete({
-      where: {
-        id: roomId,
-        adminId: userId,
-      },
-    });
+    // Delete shapes and chats first (cascade handles it, but be explicit for safety)
+    await prisma.shape.deleteMany({ where: { roomId } });
+    await prisma.chat.deleteMany({ where: { roomId } });
+    await prisma.roomParticipant.deleteMany({ where: { roomId } });
+    await prisma.room.delete({ where: { id: roomId } });
 
-    res.json({
-      message: "Room deleted successfully",
-    });
+    res.json({ message: "Room deleted successfully" });
   } catch (error) {
     console.error("Room deletion error:", error);
-    return res.status(500).json({
-      message: "Something went wrong while deleting the room.",
-    });
+    return res.status(500).json({ message: "Something went wrong while deleting the room." });
+  }
+});
+
+// DELETE /shape/:shapeId — delete a single shape (only the owner or room admin can delete)
+app.delete("/shape/:shapeId", authMiddleware, async (req, res) => {
+  try {
+    const shapeId = Number(req.params.shapeId);
+    const userId = (req as RequestWithUserId).userId;
+
+    if (isNaN(shapeId)) {
+      return res.status(400).json({ message: "Invalid shape ID" });
+    }
+
+    const shape = await prisma.shape.findUnique({ where: { id: shapeId } });
+    if (!shape) {
+      return res.status(404).json({ message: "Shape not found" });
+    }
+
+    // Allow shape owner OR room admin to delete
+    const room = await prisma.room.findUnique({ where: { id: shape.roomId } });
+    if (shape.userId !== userId && room?.adminId !== userId) {
+      return res.status(403).json({ message: "You don't have permission to delete this shape" });
+    }
+
+    await prisma.shape.delete({ where: { id: shapeId } });
+    res.json({ message: "Shape deleted successfully", shapeId });
+  } catch (error) {
+    console.error("Shape deletion error:", error);
+    return res.status(500).json({ message: "Something went wrong while deleting the shape." });
+  }
+});
+
+// DELETE /room/:roomId/shapes — clear all shapes in a room (admin only)
+app.delete("/room/:roomId/shapes", authMiddleware, async (req, res) => {
+  try {
+    const roomId = Number(req.params.roomId);
+    const userId = (req as RequestWithUserId).userId;
+
+    if (isNaN(roomId)) {
+      return res.status(400).json({ message: "Invalid room ID" });
+    }
+
+    const room = await prisma.room.findUnique({ where: { id: roomId } });
+    if (!room) {
+      return res.status(404).json({ message: "Room not found" });
+    }
+    if (room.adminId !== userId) {
+      return res.status(403).json({ message: "Only the room owner can clear the canvas" });
+    }
+
+    const { count } = await prisma.shape.deleteMany({ where: { roomId } });
+    res.json({ message: "Canvas cleared successfully", deletedCount: count });
+  } catch (error) {
+    console.error("Clear canvas error:", error);
+    return res.status(500).json({ message: "Something went wrong while clearing the canvas." });
   }
 });
 
