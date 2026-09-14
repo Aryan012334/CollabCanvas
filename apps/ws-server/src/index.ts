@@ -13,6 +13,16 @@ import { broadcastRedisEvent } from "./events/handlers";
 
 import { prismaClient as prisma } from "@repo/db/client";
 
+// ── Global safety net — never let an unhandled rejection crash the server ──
+// DB write failures (e.g. FK violations) must not kill the process, because
+// that would drop all in-memory room state and disconnect all live users.
+process.on("unhandledRejection", (reason) => {
+  console.error("⚠️  Unhandled promise rejection (caught globally):", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("⚠️  Uncaught exception (caught globally):", err);
+});
+
 
 
 const app = express();

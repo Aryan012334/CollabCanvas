@@ -194,37 +194,64 @@ export async function handleEvent(user: User, data: any) {
 
     case "shape:create": {
       const room = rooms.get(roomId);
-      const createdShape = await enqueue({
-        type: "shape:create",
-        roomId: roomId,
-        userId: user.userId,
-        payload: data.shape,
-      });
+
+      // Broadcast immediately with a temporary id so peers see it
+      // instantly — don't wait for the DB write.
+      const tempId = Date.now();
       if (room) {
         room.forEach((u) => {
           if (u.ws.readyState === WebSocket.OPEN) {
-            u.ws.send(
-              JSON.stringify({
-                type: "shape:create",
-                shape: {
-                  ...data.shape,
-                  id: createdShape.id,
-                },
-                roomId: roomId,
-                userId: user.userId,
-                username: user.name,
-              }),
-            );
+            u.ws.send(JSON.stringify({
+              type: "shape:create",
+              shape: { ...data.shape, id: tempId },
+              roomId,
+              userId: user.userId,
+              username: user.name,
+            }));
           }
         });
       }
-      await publishRoomEvent({
+
+      // Persist to DB asynchronously — if it fails, log and move on.
+      // The process must NOT crash on a DB error.
+      enqueue({
         type: "shape:create",
-        shape: { ...data.shape, id: createdShape.id },
         roomId,
         userId: user.userId,
-        username: user.name,
+        payload: data.shape,
+      }).then((createdShape) => {
+        // Send a follow-up to replace the tempId with the real DB id
+        if (room) {
+          room.forEach((u) => {
+            if (u.ws.readyState === WebSocket.OPEN) {
+              u.ws.send(JSON.stringify({
+                type: "shape:id_assigned",
+                tempId,
+                realId: createdShape.id,
+                roomId,
+              }));
+            }
+          });
+        }
+        publishRoomEvent({
+          type: "shape:create",
+          shape: { ...data.shape, id: createdShape.id },
+          roomId,
+          userId: user.userId,
+          username: user.name,
+        }).catch((e) => console.error("Redis publish failed:", e));
+      }).catch((err) => {
+        console.error("shape:create DB write failed permanently, shape was broadcast but not persisted:", err);
+        // Notify sender so they know persistence failed
+        if (user.ws.readyState === WebSocket.OPEN) {
+          user.ws.send(JSON.stringify({
+            type: "error",
+            message: "Shape could not be saved — room may not exist in the database.",
+            tempId,
+          }));
+        }
       });
+
       webSocketEvents.inc({ type: "shape:create", source: "client" });
       break;
     }
@@ -232,35 +259,37 @@ export async function handleEvent(user: User, data: any) {
     case "shape:update": {
       const room = rooms.get(roomId);
 
-      const updatedShape = await enqueue({
-        type: "shape:update",
-        roomId: roomId,
-        userId: user.userId,
-        payload: data.shape,
-      });
+      // Broadcast immediately — peers see the update instantly
       if (room) {
         room.forEach((u) =>
-          u.ws.send(
-            JSON.stringify({
-              type: "shape:update",
-              shape: {
-                ...data.shape,
-                id: updatedShape.id,
-              },
-              roomId: roomId,
-              userId: user.userId,
-              username: user.name,
-            }),
-          ),
+          u.ws.send(JSON.stringify({
+            type: "shape:update",
+            shape: data.shape,
+            roomId,
+            userId: user.userId,
+            username: user.name,
+          }))
         );
       }
-      await publishRoomEvent({
+
+      // Persist asynchronously — never block broadcast on DB
+      enqueue({
         type: "shape:update",
-        shape: { ...data.shape, id: updatedShape.id },
         roomId,
         userId: user.userId,
-        username: user.name,
+        payload: data.shape,
+      }).then((updatedShape) => {
+        publishRoomEvent({
+          type: "shape:update",
+          shape: { ...data.shape, id: updatedShape.id },
+          roomId,
+          userId: user.userId,
+          username: user.name,
+        }).catch((e) => console.error("Redis publish failed:", e));
+      }).catch((err) => {
+        console.error("shape:update DB write failed permanently:", err);
       });
+
       webSocketEvents.inc({ type: "shape:update", source: "client" });
       break;
     }

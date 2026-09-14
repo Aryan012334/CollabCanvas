@@ -108,16 +108,23 @@ const Room = () => {
       switch (eventData.type) {
 
         case "shape:create": {
-          // Always push to allDrawings. The shape needs to be in the array
-          // for ALL users (including the sender) because initDrawing only
-          // receives the DB-assigned ID via this echo.
+          // Server broadcasts shape:create with a tempId immediately.
+          // Only add to allDrawings if we don't already have this id.
           const incoming = eventData.shape as Shape;
           const existing = allDrawings.findIndex(s => s.id === incoming.id);
           if (existing === -1) {
             allDrawings.push(incoming);
           }
-          if (canvas && ctx) {
-            renderCanvas(canvas, ctx, zoomCtx);
+          if (canvas && ctx) renderCanvas(canvas, ctx, zoomCtx);
+          break;
+        }
+
+        case "shape:id_assigned": {
+          // DB write completed — replace tempId with real DB id in allDrawings
+          const { tempId, realId } = eventData as { tempId: number; realId: number };
+          const idx = allDrawings.findIndex(s => s.id === tempId);
+          if (idx >= 0) {
+            allDrawings[idx]!.id = realId;
           }
           break;
         }
