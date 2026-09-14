@@ -232,6 +232,21 @@ export async function initDrawing(
 
         const coords = screenToCanvas(e.clientX, e.clientY);
 
+        // Text tool: single click opens input at that position.
+        // The outer page dblclick handler still handles editing existing text shapes.
+        if (selectedTool === "text") {
+            onTextEdit(-1, {
+                id: -1,
+                startX: coords.x,
+                startY: coords.y,
+                width: 0,
+                height: 0,
+                type: "TEXT",
+                text: "",
+            });
+            return;
+        }
+
         if (selectedTool === "select") {
             const shape = getShapeAtPosition(coords.x, coords.y);
             if (shape && shape.id !== null) {

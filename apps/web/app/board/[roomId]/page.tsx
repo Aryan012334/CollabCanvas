@@ -475,25 +475,9 @@ const Room = () => {
       };
       resizeCanvas();
 
-      // FIX (Task 11): The dblclick for text-mode was registered TWICE —
-      // once here and once inside initDrawing. The inner one (inside initDrawing)
-      // now only handles select-mode text editing (double-clicking existing shapes).
-      // This outer one handles text-mode new text creation on double-click.
-      const handleTextDoubleClick = (e: MouseEvent) => {
-        if (selectedToolRef.current !== "text") return;
-        const rect = canvas.getBoundingClientRect();
-        const screenPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-        const canvasPos = {
-          x: (e.clientX - rect.left - panOffsetRef.current.x) / zoomRef.current,
-          y: (e.clientY - rect.top - panOffsetRef.current.y) / zoomRef.current,
-        };
-        setTextPosition({ screen: screenPos, canvas: canvasPos });
-        setCurrentText("");
-        setIsEditingText(true);
-        setTimeout(() => textInputRef.current?.focus(), 0);
-      };
-
-      canvas.addEventListener("dblclick", handleTextDoubleClick);
+      // The text tool now opens on single click via game.ts handleMouseDown.
+      // The inner dblclick in game.ts handles editing existing text shapes
+      // (select mode double-click). No outer handler needed here.
 
       try {
         cleanup = await initDrawing(
@@ -528,7 +512,9 @@ const Room = () => {
           },
           (shapeId, shape) => {
             if (!isSubscribed) return;
-            setEditingTextId(Number(shape.id));
+            // id === -1 means new text from single click (text tool mousedown)
+            // id >= 0  means editing an existing shape (double-click in select mode)
+            setEditingTextId(shape.id >= 0 ? Number(shape.id) : null);
             const z = zoomRef.current;
             const pan = panOffsetRef.current;
             setTextPosition({
@@ -568,7 +554,6 @@ const Room = () => {
       window.addEventListener("resize", resizeCanvas);
       return () => {
         window.removeEventListener("resize", resizeCanvas);
-        canvas.removeEventListener("dblclick", handleTextDoubleClick);
       };
     }
 
