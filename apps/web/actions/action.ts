@@ -76,6 +76,26 @@ export const deleteRoom = async (roomId: string) => {
   }
 };
 
+export const deleteShape = async (shapeId: number) => {
+  try {
+    const res = await api.delete(`/shape/${shapeId}`, authOptions());
+    return res?.data;
+  } catch (err: any) {
+    const message = err?.response?.data?.message || "Something went wrong";
+    throw new Error(message);
+  }
+};
+
+export const clearRoomCanvas = async (roomId: number) => {
+  try {
+    const res = await api.delete(`/room/${roomId}/shapes`, authOptions());
+    return res?.data;
+  } catch (err: any) {
+    const message = err?.response?.data?.message || "Something went wrong";
+    throw new Error(message);
+  }
+};
+
 export const getRooms = async () => {
   try {
     const res = await api.get("/rooms", authOptions());

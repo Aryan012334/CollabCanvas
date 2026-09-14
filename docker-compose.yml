@@ -6,6 +6,7 @@
 #
 # Services:
 #   postgres      → database (port 5433 on your machine)
+#   redis         → pub/sub for WS fan-out (port 6379)
 #   http-backend  → REST API (port 3001)
 #   ws-server     → WebSocket server (port 4000)
 #   web           → Next.js frontend (port 3000)

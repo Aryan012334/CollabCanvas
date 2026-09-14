@@ -81,8 +81,9 @@ export function QuickActions() {
   };
 
   const handleExportCanvas = () => {
-    // Export is only meaningful from inside a board; here we just inform the user
-    toast.info("Open a room and use the board menu to export the canvas");
+    // Export is only available inside a board room.
+    // Direct the user there if they have rooms, otherwise explain.
+    toast.info("Open a room first, then use the board menu (☰) → Export as PNG");
   };
 
   return (
