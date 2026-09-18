@@ -399,16 +399,17 @@ export function repaintText(ctx: CanvasRenderingContext2D, shape: Shape) {
     ctx.save();
     ctx.fillStyle = shape.strokeColor || "#000000";
 
+    // fontSize is stored in canvas-space units (normalised by zoom at creation time)
     const fontSize = shape.fontSize || 20;
     ctx.font = `${fontSize}px Virgil, cursive`;
     ctx.letterSpacing = "3px";
-    ctx.textBaseline = "top";
+    ctx.textBaseline = "top";  // matches textarea top-left origin
 
     const lines = shape.text.split('\n');
     const lineHeight = fontSize * 1.4;
 
     lines.forEach((line, index) => {
-        ctx.fillText(line, shape.startX, shape.startY + (index * lineHeight));
+        ctx.fillText(line, shape.startX, shape.startY + index * lineHeight);
     });
 
     ctx.restore();

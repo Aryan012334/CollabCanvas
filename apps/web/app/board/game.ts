@@ -233,17 +233,26 @@ export async function initDrawing(
         const coords = screenToCanvas(e.clientX, e.clientY);
 
         // Text tool: single click opens input at that position.
-        // The outer page dblclick handler still handles editing existing text shapes.
+        // Pass both the raw screen position (for positioning the textarea overlay)
+        // and the canvas position (for storing in the shape).
         if (selectedTool === "text") {
+            const rect = canvas.getBoundingClientRect();
+            const screenX = e.clientX - rect.left;
+            const screenY = e.clientY - rect.top;
             onTextEdit(-1, {
                 id: -1,
-                startX: coords.x,
+                startX: coords.x,   // canvas coords — stored in the shape
                 startY: coords.y,
                 width: 0,
                 height: 0,
                 type: "TEXT",
                 text: "",
+                // Attach screen coords as extra data the callback can use
+                // (Shape interface allows extra fields via spread)
             });
+            // We need the screen position — pass it via a side-channel on the shape object
+            // by temporarily storing it. The callback reads it.
+            (window as any).__textScreenPos = { x: screenX, y: screenY };
             return;
         }
 
@@ -424,6 +433,11 @@ export async function initDrawing(
         const coords = screenToCanvas(e.clientX, e.clientY);
         const shape = getShapeAtPosition(coords.x, coords.y);
         if (!shape || shape.id === null) return;
+        // For editing existing text, capture screen position from the shape's stored coords
+        const rect = canvas.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+        (window as any).__textScreenPos = { x: screenX, y: screenY };
         onTextEdit(shape.id, shape);
     };
 

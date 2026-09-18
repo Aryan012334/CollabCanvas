@@ -1,7 +1,6 @@
 "use client";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
-  getToolTypeFromString,
   pastelColors,
   Shape,
   tools,
@@ -344,53 +343,76 @@ const Room = () => {
   };
 
   const handleAddText = (x: number, y: number, text: string) => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
+    if (!text.trim()) return; // never create empty text shapes
 
-    const normalizedFontSize = 20 / zoom;
-    ctx.save();
-    ctx.font = `${normalizedFontSize}px Virgil, cursive`;
+    // fontSize in canvas-space units — stored in the DB and used by repaintText
+    const canvasFontSize = Math.round(20 / zoom);
+
+    // Measure the bounding box using an offscreen canvas with the correct font
+    const measurer = document.createElement("canvas").getContext("2d")!;
+    measurer.font = `${canvasFontSize}px Virgil, cursive`;
     const lines = text.split("\n");
-    const lineHeight = normalizedFontSize * 1.4;
+    const lineHeight = canvasFontSize * 1.4;
     let maxWidth = 0;
     lines.forEach((line) => {
-      maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
+      maxWidth = Math.max(maxWidth, measurer.measureText(line).width);
     });
-    const textWidth = Math.round(maxWidth + 130);
-    const textHeight = Math.round(lines.length * lineHeight);
-    ctx.restore();
+    // Add a small horizontal padding so the selection box has breathing room
+    const textWidth  = Math.ceil(maxWidth) + 8;
+    const textHeight = Math.ceil(lines.length * lineHeight);
 
     if (editingTextId !== null) {
-      const shape = getShape(editingTextId);
-      send({
-        type: "shape:update",
-        roomId: resolvedRoomId,
-        shape: {
-          ...shape,
+      // Updating an existing text shape
+      const existing = getShape(editingTextId);
+      if (existing) {
+        const updated = {
+          ...existing,
           text,
-          width: textWidth,
-          height: textHeight,
-          fontSize: Math.round(normalizedFontSize),
-        },
-      });
+          width:    textWidth,
+          height:   textHeight,
+          fontSize: canvasFontSize,
+          strokeColor: currentProperties.strokeColor || existing.strokeColor || "#000000",
+        };
+        // Apply locally immediately
+        const idx = allDrawings.findIndex(s => s.id === editingTextId);
+        if (idx >= 0) allDrawings[idx] = updated as Shape;
+        const canvas = canvasRef.current;
+        const ctx    = canvas?.getContext("2d");
+        if (canvas && ctx) {
+          renderCanvas(canvas, ctx, {
+            getZoom: () => zoomRef.current,
+            getPanOffset: () => panOffsetRef.current,
+          });
+        }
+        send({
+          type: "shape:update",
+          roomId: resolvedRoomId,
+          shape: updated,
+        });
+      }
     } else {
+      // Creating a new text shape
       send({
         type: "shape:create",
         roomId: resolvedRoomId,
         shape: {
-          startX: x,
-          startY: y,
-          width: textWidth,
-          height: textHeight,
-          type: getToolTypeFromString("text"),
+          startX:      x,
+          startY:      y,
+          width:       textWidth,
+          height:      textHeight,
+          type:        "TEXT",
           strokeColor: currentProperties.strokeColor || "#000000",
+          fillColor:   "transparent",
+          strokeWidth: currentProperties.strokeWidth || 2,
+          strokeStyle: "solid",
+          fillStyle:   "solid",
           text,
-          fontSize: Math.round(normalizedFontSize),
+          fontSize:    canvasFontSize,
         },
       });
     }
     setCurrentText("");
+    setEditingTextId(null);
   };
 
   const handlePropertyChange = (property: string, value: unknown) => {
@@ -515,13 +537,25 @@ const Room = () => {
             // id === -1 means new text from single click (text tool mousedown)
             // id >= 0  means editing an existing shape (double-click in select mode)
             setEditingTextId(shape.id >= 0 ? Number(shape.id) : null);
-            const z = zoomRef.current;
+
+            const z   = zoomRef.current;
             const pan = panOffsetRef.current;
+
+            // Use the raw screen position captured in game.ts at mousedown/dblclick.
+            // For new text: this is exactly where the user clicked.
+            // For editing: we compute from the shape's stored canvas position.
+            const screenPos = (window as any).__textScreenPos as { x: number; y: number } | undefined;
+            delete (window as any).__textScreenPos;
+
+            const screenX = screenPos
+              ? screenPos.x
+              : shape.startX * z + pan.x;
+            const screenY = screenPos
+              ? screenPos.y
+              : shape.startY * z + pan.y;
+
             setTextPosition({
-              screen: {
-                x: shape.startX * z + pan.x + 10,
-                y: shape.startY * z + pan.y + 10,
-              },
+              screen: { x: screenX, y: screenY },
               canvas: { x: shape.startX, y: shape.startY },
             });
             setCurrentText(shape.text || "");
@@ -681,6 +715,7 @@ const Room = () => {
           setIsEditingText={setIsEditingText}
           isEditingText={isEditingText}
           textPosition={textPosition}
+          zoom={zoom}
         />
       )}
 
