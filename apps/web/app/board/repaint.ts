@@ -190,6 +190,31 @@ export function repaintLine(ctx: CanvasRenderingContext2D, shape: Shape) {
     ctx.restore();
 }
 
+export function repaintFreehand(ctx: CanvasRenderingContext2D, shape: Shape) {
+    const points = shape.points ?? [];
+    if (points.length < 2) return;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.strokeStyle = shape.strokeColor || "#000000";
+    ctx.lineWidth = shape.strokeWidth || 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (shape.strokeStyle === "dashed") {
+        ctx.setLineDash([10, 5]);
+    } else if (shape.strokeStyle === "dotted") {
+        ctx.setLineDash([2, 4]);
+    }
+
+    ctx.moveTo(points[0]!.x, points[0]!.y);
+    for (const point of points.slice(1)) {
+        ctx.lineTo(point.x, point.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+}
+
 export function repaintDiamond(ctx: CanvasRenderingContext2D, shape: Shape) {
     ctx.save();
     ctx.beginPath();

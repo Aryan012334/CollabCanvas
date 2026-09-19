@@ -20,6 +20,7 @@ export const ShapeType = {
     RECTANGLE: "RECTANGLE",
     CIRCLE:    "CIRCLE",
     LINE:      "LINE",
+    FREEHAND:  "FREEHAND",
     DIAMOND:   "DIAMOND",
     ARROW:     "ARROW",
     TEXT:      "TEXT",
@@ -49,7 +50,7 @@ export interface ZoomContext {
     getPanOffset: () => { x: number; y: number };
 }
 
-export type ToolType = "hand" | "select" | "rect" | "diamond" | "circle" | "arrow" | "line" | "eraser" | "text";
+export type ToolType = "hand" | "select" | "rect" | "diamond" | "circle" | "arrow" | "line" | "freehand" | "eraser" | "text";
 
 export function getToolTypeFromString(toolType: string): string {
     switch (toolType) {

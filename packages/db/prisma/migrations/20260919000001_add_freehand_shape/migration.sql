@@ -1,0 +1,1 @@
+ALTER TYPE "ShapeType" ADD VALUE 'FREEHAND';

@@ -103,6 +103,7 @@ enum ShapeType {
   RECTANGLE
   CIRCLE
   LINE
+  FREEHAND
   DIAMOND
   ARROW
   TEXT

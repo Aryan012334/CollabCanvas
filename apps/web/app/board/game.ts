@@ -1,5 +1,5 @@
 import { getToolTypeFromString, Shape, ToolType, ZoomContext } from "./types";
-import { repaintRect, repaintCircle, repaintLine, repaintDiamond, repaintArrow, repaintText } from "./repaint";
+import { repaintRect, repaintCircle, repaintLine, repaintFreehand, repaintDiamond, repaintArrow, repaintText } from "./repaint";
 import { getAllShapesInRoom } from "@/actions/action";
 
 export let allDrawings: Shape[] = [];
@@ -74,6 +74,7 @@ function renderPreviousShapes(
             case "RECTANGLE": repaintRect(ctx, shape); break;
             case "CIRCLE":    repaintCircle(ctx, shape); break;
             case "LINE":      repaintLine(ctx, shape); break;
+            case "FREEHAND":  repaintFreehand(ctx, shape); break;
             case "DIAMOND":   repaintDiamond(ctx, shape); break;
             case "ARROW":     repaintArrow(ctx, shape); break;
             case "TEXT":      repaintText(ctx, shape); break;
@@ -358,6 +359,7 @@ export async function initDrawing(
             case "rect":    repaintRect(ctx, currentShape); break;
             case "circle":  repaintCircle(ctx, currentShape); break;
             case "line":    repaintLine(ctx, currentShape); break;
+            case "freehand": repaintFreehand(ctx, currentShape); break;
             case "diamond": repaintDiamond(ctx, currentShape); break;
             case "arrow":   repaintArrow(ctx, currentShape); break;
             default: break;
