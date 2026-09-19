@@ -1,17 +1,18 @@
-const fs = require('fs');
-const path = require('path');
-const jwt = require('../../apps/ws-server/node_modules/jsonwebtoken');
 const WebSocket = require('../../node_modules/ws');
 
-const env = fs.readFileSync(path.resolve(__dirname, '../../.env'), 'utf8');
-const secret = env.match(/^JWT_SECRET=(.*)$/m)?.[1]?.trim();
-if (!secret) throw new Error('JWT_SECRET is missing from .env');
+const API_URL = 'http://localhost:3001';
 
-const token = jwt.sign({ userId: `smoke-${Date.now()}`, name: 'Mobile Smoke Test' }, secret, { expiresIn: '5m' });
-const roomId = String(Date.now());
-const url = `ws://localhost:4000?token=${encodeURIComponent(token)}`;
+async function api(path, options = {}) {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(`${response.status}: ${JSON.stringify(body)}`);
+  return body;
+}
 
-function connect() {
+function connect(url) {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(url);
     socket.once('open', () => resolve(socket));
@@ -30,8 +31,15 @@ function nextEvent(socket, timeoutMs = 5000) {
 }
 
 (async () => {
-  const first = await connect();
-  const second = await connect();
+  const suffix = Date.now();
+  const email = `mobile-smoke-${suffix}@example.com`;
+  await api('/signup', { method: 'POST', body: JSON.stringify({ name: 'Mobile Smoke Test', email, password: 'smoke-password-123' }) });
+  const login = await api('/login', { method: 'POST', body: JSON.stringify({ email, password: 'smoke-password-123' }) });
+  const token = login.user.token;
+  const roomId = (await api('/room', { method: 'POST', headers: { Authorization: token }, body: JSON.stringify({ name: `smoke-${suffix}` }) })).data.roomId;
+  const url = `ws://localhost:4000?token=${encodeURIComponent(token)}`;
+  const first = await connect(url);
+  const second = await connect(url);
   first.send(JSON.stringify({ type: 'join-room', roomId }));
   second.send(JSON.stringify({ type: 'join-room', roomId }));
   await nextEvent(first);
@@ -55,7 +63,15 @@ function nextEvent(socket, timeoutMs = 5000) {
   if (event.type !== 'shape:create' || event.shape?.type !== 'FREEHAND' || event.shape.points?.length !== 3) {
     throw new Error(`Unexpected event: ${JSON.stringify(event)}`);
   }
-  console.log(JSON.stringify({ ok: true, event: event.type, shapeType: event.shape.type, pointCount: event.shape.points.length }));
+  let persisted = [];
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    persisted = await api(`/shapes/${roomId}`, { headers: { Authorization: token } });
+    if (persisted.some((shape) => shape.type === 'FREEHAND' && shape.points?.length === 3)) break;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  if (!persisted.some((shape) => shape.type === 'FREEHAND' && shape.points?.length === 3)) throw new Error(`Shape was broadcast but not persisted: ${JSON.stringify(persisted)}`);
+  await api(`/room/${roomId}`, { method: 'DELETE', headers: { Authorization: token } });
+  console.log(JSON.stringify({ ok: true, event: event.type, shapeType: event.shape.type, pointCount: event.shape.points.length, persisted: true }));
   first.close();
   second.close();
 })().catch((error) => {
