@@ -37,6 +37,12 @@ The PostgreSQL migration adding `FREEHAND` must be applied before drawing is per
 pnpm db:migrate
 ```
 
+The protocol smoke test requires the WebSocket server and a configured `.env`:
+
+```bash
+pnpm --filter mobile smoke:ws
+```
+
 ## Protocol
 
 The mobile client uses the existing raw JWT convention:
