@@ -33,17 +33,14 @@ export function QuickActions() {
 
   const { mutate, isPending } = useMutation({
     mutationFn: createRoom,
-    onSuccess: (data) => {
-      // Close dialog first, then update UI
+    onSuccess: () => {
       setCreateOpen(false);
-      toast.success("Room created successfully");
-      // Invalidate so the rooms grid refreshes
+      // Clear the input for next use
+      if (inputRef.current) inputRef.current.value = "";
+      toast.success("Room created — click Open in My Rooms to enter it");
+      // Refresh the rooms grid so the new room appears immediately
       queryClient.invalidateQueries({ queryKey: ["rooms"] });
-      // Navigate directly to the new room if the API returns roomId
-      const roomId = data?.data?.roomId;
-      if (roomId) {
-        router.push(`/board/${roomId}`);
-      }
+      // Stay on dashboard — user clicks Open themselves
     },
     onError: (error: Error) => {
       toast.error(error?.message || "Error creating the room");
@@ -57,12 +54,33 @@ export function QuickActions() {
     mutate({ name });
   };
 
-  const handleJoinViaCode = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleJoinViaCode = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const code = joinCodeRef.current?.value?.trim();
     if (!code) return;
-    setJoinOpen(false);
-    router.push(`/board/${code}`);
+
+    // If numeric, go directly
+    const asNumber = Number(code);
+    if (!isNaN(asNumber) && asNumber > 0) {
+      setJoinOpen(false);
+      router.push(`/board/${asNumber}`);
+      return;
+    }
+
+    // Slug — look it up first so the user gets a clear error if it doesn't exist
+    try {
+      const { getRoomBySlug } = await import("@/actions/action");
+      const room = await getRoomBySlug(code);
+      if (room?.id) {
+        setJoinOpen(false);
+        // Navigate by numeric ID so the URL is stable and unambiguous
+        router.push(`/board/${room.id}`);
+      } else {
+        toast.error(`No room found with name "${code}"`);
+      }
+    } catch {
+      toast.error("Could not find that room — check the name and try again");
+    }
   };
 
   const handleImportCanvas = (e: React.FormEvent<HTMLFormElement>) => {
@@ -110,7 +128,7 @@ export function QuickActions() {
               <DialogTitle>Create a new room</DialogTitle>
               <DialogDescription>
                 Give your room a short name (3–20 characters, no spaces).
-                You&apos;ll be taken straight to the board.
+                It will appear in My Rooms — click Open to enter.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit}>
