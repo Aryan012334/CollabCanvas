@@ -105,14 +105,20 @@ function CanvasScreen({ token, roomId, onExit }: { token: string; roomId: number
   const socketRef = useRef<WebSocket | null>(null);
   const pointsRef = useRef<Point[]>([]);
 
+  function sendSocket(event: Record<string, unknown>) {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify(event));
+    }
+  }
+
   useEffect(() => {
     let active = true;
     getShapes(roomId, token).then((loaded) => { if (active) setShapes(loaded); }).catch((error) => Alert.alert("Could not load canvas", error.message));
     const socket = openRoomSocket(token, (event) => handleSocketEvent(event));
     socketRef.current = socket;
-    socket.onopen = () => socket.send(JSON.stringify({ type: "join-room", roomId }));
+    socket.onopen = () => sendSocket({ type: "join-room", roomId });
     socket.onerror = () => Alert.alert("Connection problem", "The drawing server could not be reached.");
-    return () => { active = false; if (socket.readyState === WebSocket.OPEN) { socket.send(JSON.stringify({ type: "leave-room", roomId })); socket.close(); } };
+    return () => { active = false; if (socket.readyState === WebSocket.OPEN) { sendSocket({ type: "leave-room", roomId }); socket.close(); } };
   }, [roomId, token]);
 
   function handleSocketEvent(event: SocketEvent) {
@@ -128,7 +134,7 @@ function CanvasScreen({ token, roomId, onExit }: { token: string; roomId: number
   const panResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onPanResponderGrant: (event) => { pointsRef.current = [{ x: event.nativeEvent.locationX, y: event.nativeEvent.locationY }]; setDraft(pointsRef.current); },
-    onPanResponderMove: (event) => { const point = { x: event.nativeEvent.locationX, y: event.nativeEvent.locationY }; pointsRef.current = [...pointsRef.current, point]; setDraft(pointsRef.current); socketRef.current?.send(JSON.stringify({ type: "cursor:move", roomId, x: point.x, y: point.y })); },
+    onPanResponderMove: (event) => { const point = { x: event.nativeEvent.locationX, y: event.nativeEvent.locationY }; pointsRef.current = [...pointsRef.current, point]; setDraft(pointsRef.current); sendSocket({ type: "cursor:move", roomId, x: point.x, y: point.y }); },
     onPanResponderRelease: () => {
       const points = pointsRef.current;
       if (points.length > 1) {
@@ -136,7 +142,7 @@ function CanvasScreen({ token, roomId, onExit }: { token: string; roomId: number
         const startY = Math.min(...points.map((point) => point.y));
         const endX = Math.max(...points.map((point) => point.x));
         const endY = Math.max(...points.map((point) => point.y));
-        socketRef.current?.send(JSON.stringify({ type: "shape:create", roomId, shape: { startX, startY, width: endX - startX, height: endY - startY, type: "FREEHAND", points, strokeWidth: 4, strokeColor: "#f2f0e9", strokeStyle: "solid" } }));
+        sendSocket({ type: "shape:create", roomId, shape: { startX, startY, width: endX - startX, height: endY - startY, type: "FREEHAND", points, strokeWidth: 4, strokeColor: "#f2f0e9", strokeStyle: "solid" } });
       }
       pointsRef.current = []; setDraft([]);
     },
