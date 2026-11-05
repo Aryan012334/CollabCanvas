@@ -100,6 +100,9 @@ importers:
       '@types/jest':
         specifier: ^30.0.0
         version: 30.0.0
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.15.3
       '@types/supertest':
         specifier: ^7.2.1
         version: 7.2.1
