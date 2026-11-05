@@ -99,6 +99,32 @@ model Shape {
   @@index([userId])
 }
 
+model DevxAnalysisRun {
+  id                String   @id @default(uuid())
+  kind              String
+  repository        String?
+  pullRequestNumber Int?
+  commitSha         String?
+  providerMode      String
+  result            Json
+  createdAt         DateTime @default(now())
+
+  @@index([kind, createdAt])
+  @@index([repository, pullRequestNumber, commitSha])
+}
+
+model DevxWebhookDelivery {
+  deliveryId String   @id
+  source     String
+  event      String
+  status     String
+  errorCode  String?
+  createdAt  DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([createdAt])
+}
+
 enum ShapeType {
   RECTANGLE
   CIRCLE
